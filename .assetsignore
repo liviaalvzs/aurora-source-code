@@ -4,3 +4,6 @@
 .assetsignore
 wrangler.jsonc
 supabase
+worker.js
+.dev.vars
+node_modules
