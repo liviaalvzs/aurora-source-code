@@ -123,20 +123,39 @@ $("tabbar").onclick = e => {
   });
 };
 
-// login por link no e-mail
-sb.auth.onAuthStateChange((_ev, session) => {
+// login com e-mail e senha
+const home = location.origin + location.pathname;
+sb.auth.onAuthStateChange((ev, session) => {
+  if (ev === "PASSWORD_RECOVERY") setTimeout(newPassword); // veio do link "esqueci a senha"
   const u = session?.user || null;
   if (u?.id === user?.id) return;
   user = u;
   document.body.classList.toggle("out", !user);
   if (user) pull();
 });
+async function newPassword() {
+  const password = prompt("Digite a nova senha (mínimo 6 caracteres):");
+  if (!password) return;
+  const { error } = await sb.auth.updateUser({ password });
+  alert(error ? "Não deu: " + error.message : "Senha trocada!");
+}
 $("login").onsubmit = async e => {
   e.preventDefault();
-  const email = e.target.elements.email.value.trim(), msg = $("loginmsg");
-  msg.textContent = "enviando…";
-  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-  msg.textContent = error ? "Não deu: " + error.message : "Pronto! Abra o link que chegou no seu e-mail.";
+  const f = e.target.elements, email = f.email.value.trim(), password = f.password.value, msg = $("loginmsg");
+  msg.textContent = "um instante…";
+  if (e.submitter?.value === "up") {
+    const { data: r, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: home } });
+    msg.textContent = error ? "Não deu: " + error.message : r.session ? "" : "Conta criada! Confirme pelo link que chegou no seu e-mail e depois entre.";
+  } else {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    msg.textContent = !error ? "" : /invalid login/i.test(error.message) ? "E-mail ou senha errados." : /not confirmed/i.test(error.message) ? "Confirme seu e-mail pelo link que enviamos antes de entrar." : "Não deu: " + error.message;
+  }
+};
+$("forgot").onclick = async () => {
+  const email = $("login").elements.email.value.trim(), msg = $("loginmsg");
+  if (!email) return msg.textContent = "Digite seu e-mail acima primeiro.";
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: home });
+  msg.textContent = error ? "Não deu: " + error.message : "Enviamos um link para criar uma senha nova.";
 };
 $("logout").onclick = async () => {
   if (!confirm("Sair da aurora neste aparelho?")) return;

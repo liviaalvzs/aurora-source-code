@@ -21,9 +21,13 @@
 
 <form class="sec login" id="login">
   <h3>entrar</h3>
-  <p>Digite seu e-mail. Vamos mandar um link para você entrar, sem senha.</p>
-  <input class="in" name="email" type="email" placeholder="seu@email.com" autocomplete="email" required>
-  <button class="nbtn txt">enviar link</button>
+  <input class="in" name="email" type="email" placeholder="seu@email.com" autocomplete="email" aria-label="E-mail" required>
+  <input class="in" name="password" type="password" placeholder="senha (mínimo 6 caracteres)" autocomplete="current-password" aria-label="Senha" minlength="6" required>
+  <div class="loginbtns">
+    <button class="nbtn txt" value="in">entrar</button>
+    <button class="nbtn txt ghost" value="up">criar conta</button>
+  </div>
+  <button type="button" class="add" id="forgot">esqueci a senha</button>
   <p class="loginmsg" id="loginmsg" role="status"></p>
 </form>
 
