@@ -1,4 +1,6 @@
-// ponytail: dados só no localStorage deste navegador; trocar por um backend quando precisar sincronizar entre aparelhos
+// Supabase: URL e chave pública (publishable/anon) do projeto. A segurança vem do RLS em supabase/schema.sql.
+const SB_URL = "";
+const SB_KEY = "";
 const KEY = "aurora-caderno";
 const DOWL = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
 const MONL = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
@@ -7,10 +9,34 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 const iso = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
+const norm = d => { d = d && typeof d === "object" ? d : {}; d.habits ||= []; d.reminders ||= []; d.log ||= {}; return d; };
 let data;
-try { data = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { data = {}; }
-data.habits ||= []; data.reminders ||= []; data.log ||= {};
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {} };
+try { data = norm(JSON.parse(localStorage.getItem(KEY))); } catch { data = norm(); }
+
+// ponytail: um JSON por usuário, o último a salvar vence; editar em dois aparelhos ao mesmo tempo pode sobrescrever
+const sb = supabase.createClient(SB_URL, SB_KEY);
+let user = null, timer = null;
+const status = t => { $("sync").textContent = t; };
+const save = () => {
+  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+  if (!user) return;
+  clearTimeout(timer);
+  timer = setTimeout(push, 600);
+};
+async function push() {
+  timer = null;
+  const { error } = await sb.from("aurora_state").upsert({ user_id: user.id, data, updated_at: new Date().toISOString() });
+  status(error ? "não salvou na nuvem" : "");
+}
+async function pull() {
+  if (timer) return;
+  const { data: row, error } = await sb.from("aurora_state").select("data").eq("user_id", user.id).maybeSingle();
+  if (error) return status("sem conexão");
+  if (!row) return push(); // primeira vez: sobe o que já está neste aparelho
+  data = norm(row.data);
+  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+  render();
+}
 
 const today = new Date(); today.setHours(0,0,0,0);
 let sel = new Date(today);
@@ -96,5 +122,28 @@ $("tabbar").onclick = e => {
     $(x.dataset.tab).hidden = !on;
   });
 };
+
+// login por link no e-mail
+sb.auth.onAuthStateChange((_ev, session) => {
+  const u = session?.user || null;
+  if (u?.id === user?.id) return;
+  user = u;
+  document.body.classList.toggle("out", !user);
+  if (user) pull();
+});
+$("login").onsubmit = async e => {
+  e.preventDefault();
+  const email = e.target.elements.email.value.trim(), msg = $("loginmsg");
+  msg.textContent = "enviando…";
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+  msg.textContent = error ? "Não deu: " + error.message : "Pronto! Abra o link que chegou no seu e-mail.";
+};
+$("logout").onclick = async () => {
+  if (!confirm("Sair da aurora neste aparelho?")) return;
+  await sb.auth.signOut();
+  try { localStorage.removeItem(KEY); } catch {}
+  data = norm(); render();
+};
+document.addEventListener("visibilitychange", () => { if (!document.hidden && user) pull(); });
 
 render();

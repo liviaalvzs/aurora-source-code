@@ -11,11 +11,21 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Nunito:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="out">
 <header class="appbar">
   <h1>aurora</h1>
+  <span class="sync" id="sync"></span>
   <button type="button" class="nbtn txt" id="tod" hidden>hoje</button>
+  <button type="button" class="nbtn txt" id="logout">sair</button>
 </header>
+
+<form class="sec login" id="login">
+  <h3>entrar</h3>
+  <p>Digite seu e-mail. Vamos mandar um link para você entrar, sem senha.</p>
+  <input class="in" name="email" type="email" placeholder="seu@email.com" autocomplete="email" required>
+  <button class="nbtn txt">enviar link</button>
+  <p class="loginmsg" id="loginmsg" role="status"></p>
+</form>
 
 <div class="wrap">
   <div class="dayhead">
@@ -54,6 +64,7 @@
   <button type="button" data-tab="tab-habits" aria-pressed="true"><span class="ico">✓</span>Hábitos</button>
   <button type="button" data-tab="tab-reminders" aria-pressed="false"><span class="ico">◷</span>Lembretes</button>
 </nav>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
