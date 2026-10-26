@@ -1,6 +1,6 @@
 // Supabase: URL e chave pública (publishable/anon) do projeto. A segurança vem do RLS em supabase/schema.sql.
-const SB_URL = "";
-const SB_KEY = "";
+const SB_URL = "https://esxphcyqtjcrvijlgdde.supabase.co";
+const SB_KEY = "sb_publishable_ChgKrC8ouh2PT4k5vJeF_w_CiUWVO12";
 const KEY = "aurora-caderno";
 const DOWL = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
 const MONL = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
