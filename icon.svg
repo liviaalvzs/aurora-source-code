@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#fbfaf7"/>
+  <g fill="#fff" stroke="#1c1b1d" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <!-- peito peludo -->
+    <path d="M150 300c-16 50-8 108 30 142 10-8 22-8 30 2 10-10 26-10 34 0 6-6 18-6 24 0 8-10 24-10 34 0 8-10 20-10 30-2 38-34 46-92 30-142z"/>
+    <!-- orelhas caídas, macias, com a ponta em ondas -->
+    <path d="M172 150c-42 4-72 40-80 92-6 40 4 80 26 102 6-10 14-12 22-6 6-10 18-10 24-2 8-24 10-54 4-86-4-26-4-60 4-100z"/>
+    <path d="M340 150c42 4 72 40 80 92 6 40-4 80-26 102-6-10-14-12-22-6-6-10-18-10-24-2-8-24-10-54-4-86 4-26 4-60-4-100z"/>
+    <!-- cabeça larga -->
+    <path d="M146 222c0-72 50-112 110-112s110 40 110 112c0 40-10 74-28 98l12 10-18 2c-20 22-46 34-76 34s-56-12-76-34l-18-2 12-10c-18-24-28-58-28-98z"/>
+  </g>
+  <g fill="none" stroke="#1c1b1d" stroke-linecap="round" stroke-linejoin="round">
+    <!-- pelo das orelhas e do peito -->
+    <path d="M122 236c-6 26-4 54 6 76M144 220c-4 18-2 38 4 54M390 236c6 26 4 54-6 76M368 220c4 18 2 38-4 54" stroke-width="6"/>
+    <path d="M196 396c8 10 12 22 12 34M316 396c-8 10-12 22-12 34M256 404v22" stroke-width="6"/>
+    <!-- testa e sobrancelhas -->
+    <path d="M196 200c12-10 28-12 40-4M316 200c-12-10-28-12-40-4" stroke-width="7"/>
+    <!-- focinho -->
+    <path d="M204 296c4-26 26-42 52-42s48 16 52 42" stroke-width="7"/>
+    <!-- boca sorrindo -->
+    <path d="M256 304v18M256 322c-10 16-32 18-46 6M256 322c10 16 32 18 46 6" stroke-width="8"/>
+  </g>
+  <!-- língua -->
+  <path d="M238 334c0 26 8 40 18 40s18-14 18-40" fill="#fff" stroke="#1c1b1d" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M256 340v18" stroke="#1c1b1d" stroke-width="5" stroke-linecap="round"/>
+  <!-- olhos e nariz -->
+  <g fill="#1c1b1d">
+    <circle cx="214" cy="232" r="16"/><circle cx="298" cy="232" r="16"/>
+    <path d="M226 282c0-12 14-18 30-18s30 6 30 18c0 14-16 24-30 24s-30-10-30-24z"/>
+  </g>
+  <g fill="#fff"><circle cx="220" cy="226" r="5"/><circle cx="304" cy="226" r="5"/><ellipse cx="246" cy="276" rx="7" ry="4"/></g>
+</svg>

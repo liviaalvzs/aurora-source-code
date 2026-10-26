@@ -9,12 +9,16 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="aurora">
 <title>aurora</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Manrope:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="out">
 <header class="appbar">
+  <img class="logo" src="/icon.svg" alt="">
   <h1>aurora</h1>
   <span class="sync" id="sync"></span>
   <button type="button" class="nbtn txt" id="logout">sair</button>
@@ -45,45 +49,18 @@
   </section>
 
   <section class="tab" id="tab-hab" hidden>
-    <details class="sec addbox">
-      <summary>+ novo hábito</summary>
-      <form class="addform" id="addhabit">
-        <input class="in" name="name" placeholder="ex: beber 2 L de água" autocomplete="off" required>
-        <button class="nbtn txt">criar hábito</button>
-      </form>
-    </details>
+    <button type="button" class="newbtn" data-new="habit">+ novo hábito</button>
     <div class="sec" id="habits"></div>
   </section>
 
   <section class="tab" id="tab-wo" hidden>
-    <details class="sec addbox">
-      <summary>+ novo treino</summary>
-      <form class="addform" id="addworkout">
-        <div class="pages">
-          <label>dia<input class="in" name="date" type="date" required></label>
-          <label>minutos<input class="in" name="min" type="number" min="1" inputmode="numeric"></label>
-        </div>
-        <select class="in" name="type" aria-label="Tipo de treino"></select>
-        <input class="in" name="note" placeholder="como foi (opcional)" autocomplete="off">
-        <button class="nbtn txt">registrar treino</button>
-      </form>
-    </details>
+    <button type="button" class="newbtn" data-new="workout">+ novo treino</button>
     <div class="sec" id="wosum"></div>
     <div class="sec" id="wolist"></div>
   </section>
 
   <section class="tab" id="tab-ev" hidden>
-    <details class="sec addbox">
-      <summary>+ novo evento</summary>
-      <form class="addform" id="addevent">
-        <div class="pages">
-          <label>dia<input class="in" name="date" type="date" required></label>
-          <label>hora (opcional)<input class="in" name="time" type="time"></label>
-        </div>
-        <input class="in" name="title" placeholder="ex: aniversário da Ana" autocomplete="off" required>
-        <button class="nbtn txt">criar evento</button>
-      </form>
-    </details>
+    <button type="button" class="newbtn" data-new="event">+ novo evento</button>
     <div class="sec" id="evnext"></div>
     <details class="sec addbox" id="evpastbox">
       <summary>eventos passados</summary>
@@ -97,27 +74,11 @@
       <button type="button" data-c="link" aria-pressed="false">Links</button>
     </div>
     <div class="tab" id="c-book">
-      <details class="sec addbox">
-        <summary>+ novo livro</summary>
-        <form class="addform" id="addbook">
-          <input class="in" name="title" placeholder="título" autocomplete="off" required>
-          <input class="in" name="author" placeholder="autor(a)" autocomplete="off">
-          <input class="in" name="pages" type="number" min="1" inputmode="numeric" placeholder="nº de páginas">
-          <input class="in" name="cover" type="url" placeholder="link da capa (opcional, senão eu procuro)">
-          <button class="nbtn txt">criar livro</button>
-        </form>
-      </details>
+      <button type="button" class="newbtn" data-new="book">+ novo livro</button>
       <div class="cards" id="list-book"></div>
     </div>
     <div class="tab" id="c-link" hidden>
-      <details class="sec addbox">
-        <summary>+ novo link</summary>
-        <form class="addform" id="addlink">
-          <input class="in" name="url" type="url" placeholder="cole o link do podcast, artigo, vídeo…" required>
-          <label class="chk"><input type="checkbox" name="today" checked> consumi hoje</label>
-          <button class="nbtn txt">adicionar</button>
-        </form>
-      </details>
+      <button type="button" class="newbtn" data-new="link">+ novo link</button>
       <div class="cards" id="list-link"></div>
     </div>
   </section>
@@ -130,6 +91,20 @@
   <button type="button" data-tab="tab-ev" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4h11l-2.5 4L17 12H6"/></svg>Eventos</button>
   <button type="button" data-tab="tab-ct" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.5-1 5.5-1 8 .8 2.5-1.8 5.5-1.8 8-.8v13c-2.5-1-5.5-1-8 .8-2.5-1.8-5.5-1.8-8-.8z"/><path d="M12 6.3v13.3"/></svg>Conteúdo</button>
 </nav>
+
+<!-- folha que sobe de baixo: criar e editar qualquer registro -->
+<dialog class="sheet" id="sheet" aria-labelledby="shtitle">
+  <form id="shform">
+    <div class="sech"><h3 id="shtitle"></h3><button type="button" class="del" id="shclose" aria-label="Fechar">✕</button></div>
+    <div class="seg four" id="shseg" hidden></div>
+    <div class="shfields" id="shfields"></div>
+    <div class="shbtns">
+      <button class="nbtn txt" id="shsave">salvar</button>
+      <button type="button" class="nbtn txt ghost" id="shdel" hidden>apagar</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 <script src="app.js"></script>
 </body>

@@ -1,7 +1,7 @@
 // Supabase: URL e chave pública (publishable/anon) do projeto. A segurança vem do RLS em supabase/schema.sql.
 const SB_URL = "https://esxphcyqtjcrvijlgdde.supabase.co";
 const SB_KEY = "sb_publishable_ChgKrC8ouh2PT4k5vJeF_w_CiUWVO12";
-const KEY = "aurora-caderno";
+const KEY = "aurora-caderno", PENDING = "aurora-pendente";
 const DOWL = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
 const MONL = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const KINDS = { book: ["Livro", "▤"], link: ["Link", "↗"] };
@@ -15,8 +15,8 @@ const addDays = (k, n) => { const d = toDate(k); d.setDate(d.getDate() + n); ret
 const uid = () => crypto.randomUUID();
 
 /* dados:
-   items    livros e links          [{ id, kind, title, ... }]
-   days     conteúdo por dia        { "2026-10-26": [{ id, item, from?, to? }] }
+   items    livros e links          [{ id, kind, title, note, ... }]
+   days     conteúdo por dia        { "2026-10-26": [{ id, item, from?, to?, note? }] }
    habits   lista de hábitos        [{ id, name }]
    checks   hábitos feitos por dia  { "2026-10-26": { habitId: 1 } }
    workouts treinos                 [{ id, date, type, min, note }]
@@ -30,36 +30,56 @@ const norm = d => {
 let data;
 try { data = norm(JSON.parse(localStorage.getItem(KEY))); } catch { data = norm(); }
 
+// ---------- nuvem ----------
 // ponytail: um JSON por usuário, o último a salvar vence; editar em dois aparelhos ao mesmo tempo pode sobrescrever
+// Sem internet, tudo fica no aparelho marcado como "pendente" e sobe quando a conexão voltar.
 const sb = supabase.createClient(SB_URL, SB_KEY);
 let user = null, timer = null;
+const ls = (k, v) => { try { v === undefined ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+const pending = () => { try { return localStorage.getItem(PENDING) === "1"; } catch { return false; } };
 const status = t => { $("sync").textContent = t; };
 const save = () => {
-  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+  ls(KEY, JSON.stringify(data));
   render();
   if (!user) return;
+  ls(PENDING, "1");
   clearTimeout(timer);
   timer = setTimeout(push, 600);
 };
 async function push() {
   timer = null;
   const { error } = await sb.from("aurora_state").upsert({ user_id: user.id, data, updated_at: new Date().toISOString() });
-  status(error ? "não salvou na nuvem" : "");
+  if (error) return status(navigator.onLine ? "não salvou na nuvem" : "sem internet · salvo no aparelho");
+  ls(PENDING); status("");
 }
 async function pull() {
   if (timer) return;
+  if (pending()) return push(); // o que foi feito offline sobe antes de baixar
   const { data: row, error } = await sb.from("aurora_state").select("data").eq("user_id", user.id).maybeSingle();
-  if (error) return status("sem conexão");
+  if (error) return status(navigator.onLine ? "sem conexão com a nuvem" : "sem internet");
   if (!row) return push(); // primeira vez: sobe o que já está neste aparelho
   data = norm(row.data);
-  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
-  render();
+  ls(KEY, JSON.stringify(data));
+  status(""); render();
 }
+addEventListener("online", () => { if (user) pull(); });
+addEventListener("offline", () => status("sem internet · salvo no aparelho"));
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+// ---------- dia de hoje (atualiza se o app ficar aberto de um dia para o outro) ----------
+let today, TODAY, view, sel, lastAdd = "event";
+function setToday() {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const k = iso(t);
+  if (k === TODAY) return false;
+  if (!TODAY || sel === TODAY) { sel = k; view = new Date(t.getFullYear(), t.getMonth(), 1); }
+  today = t; TODAY = k;
+  return true;
+}
+setToday();
+setInterval(() => { if (setToday()) render(); }, 60000);
 
 // ---------- consultas ----------
-const today = new Date(); today.setHours(0,0,0,0);
-const TODAY = iso(today);
-let view = new Date(today.getFullYear(), today.getMonth(), 1), sel = TODAY, addKind = "book";
 const itemOf = id => data.items.find(i => i.id === id);
 const entriesOf = id => Object.entries(data.days).flatMap(([day, es]) => es.filter(e => e.item === id).map(e => ({ ...e, day })));
 const lastPage = id => Math.max(0, ...entriesOf(id).map(e => +e.to || 0));
@@ -73,6 +93,7 @@ function streak(hid) {
 const byTime = (a, b) => (a.date + (a.time || "99")).localeCompare(b.date + (b.time || "99"));
 const eventsOn = k => data.events.filter(e => e.date === k).sort(byTime);
 const workoutsOn = k => data.workouts.filter(w => w.date === k);
+const openItems = kind => data.items.filter(i => i.kind === kind && !i.done);
 
 async function preview(url) {
   try {
@@ -91,6 +112,11 @@ async function findCover(title, author) {
     return id ? "https://covers.openlibrary.org/b/id/" + id + "-M.jpg" : "";
   } catch { return ""; }
 }
+function newLink(p) {
+  const it = { id: uid(), kind: "link", url: p.url, title: p.title, image: p.image, site: p.site, desc: p.desc, created: TODAY };
+  data.items.push(it);
+  return it;
+}
 
 // ---------- desenho ----------
 const thumb = (it, cls) => it.image
@@ -104,10 +130,17 @@ document.addEventListener("error", e => {
   s.className = img.className + " gl"; s.textContent = img.dataset.gl;
   img.replaceWith(s);
 }, true);
-const del = (what, id, label) => '<button type="button" class="del" data-del="' + what + ":" + id + '" aria-label="' + esc(label) + '">✕</button>';
+const note = t => t ? '<span class="note">' + esc(t) + "</span>" : "";
 const habitCheck = (h, k) => '<label class="hrow"><input type="checkbox" data-hk="' + h.id + '" data-day="' + k + '"' + (done(k, h.id) ? " checked" : "") + '><span>' + esc(h.name) + '</span></label>';
-const workoutLine = w => '<li class="line"><div class="eb"><span class="et">' + esc(w.type) + (w.min ? " · " + w.min + " min" : "") + '</span>' + (w.note ? '<span class="meta">' + esc(w.note) + "</span>" : "") + "</div>" + del("workout", w.id, "Apagar treino") + "</li>";
-const eventLine = (e, withDate) => '<li class="line"><span class="when">' + (withDate ? fmt(e.date) + (e.time ? " · " : "") : "") + (e.time || (withDate ? "" : "dia todo")) + '</span><span class="et">' + esc(e.title) + "</span>" + del("event", e.id, "Apagar evento") + "</li>";
+// cada linha é um botão: tocar abre a edição
+const lineBtn = (edit, inner) => '<li><button type="button" class="line" data-edit="' + edit + '">' + inner + '<span class="chev" aria-hidden="true">›</span></button></li>';
+const workoutLine = w => lineBtn("workout:" + w.id, '<span class="eb"><span class="et">' + esc(w.type) + (w.min ? " · " + w.min + " min" : "") + "</span>" + note(w.note) + "</span>");
+const eventLine = (e, withDate) => lineBtn("event:" + e.id, '<span class="when">' + (withDate ? fmt(e.date) + (e.time ? " · " : "") : "") + (e.time || (withDate ? "" : "dia todo")) + '</span><span class="et">' + esc(e.title) + "</span>");
+const entryLine = e => {
+  const it = itemOf(e.item); if (!it) return "";
+  const pages = e.from || e.to ? " · p. " + (e.from || "?") + "–" + (e.to || "?") : "";
+  return lineBtn("entry:" + e.id, thumb(it, "th") + '<span class="eb"><span class="et">' + esc(it.title) + '</span><span class="meta">' + KINDS[it.kind][0] + pages + "</span>" + note(e.note) + "</span>");
+};
 
 function renderCal() {
   $("month").textContent = MONL[view.getMonth()] + " " + view.getFullYear();
@@ -122,51 +155,22 @@ function renderCal() {
       '<span class="n">' + n + '</span>' +
       '<span class="ths">' + (ev ? '<i class="mk ev"></i>' : "") + (wo ? '<i class="mk wo"></i>' : "") + its.slice(0, 2).map(it => thumb(it, "mini")).join("") +
       (its.length > 2 ? '<span class="more">+' + (its.length - 2) + '</span>' : "") + '</span>' +
-      (r > 0 ?'<i class="hb"><i style="width:' + Math.round(r * 100) + '%"></i></i>' : "") + '</button>';
+      (r > 0 ? '<i class="hb"><i style="width:' + Math.round(r * 100) + '%"></i></i>' : "") + '</button>';
   }
   $("cal").innerHTML = h;
 }
 
-function block(title, body, form) {
-  return '<div class="block"><span class="flabel">' + title + "</span>" + body + (form || "") + "</div>";
-}
+const block = (title, body) => '<div class="block"><span class="flabel">' + title + "</span>" + body + "</div>";
 function renderDay() {
   const d = toDate(sel), es = data.days[sel] || [], evs = eventsOn(sel), wos = workoutsOn(sel);
   let h = '<div class="sech"><h3>' + d.getDate() + " de " + MONL[d.getMonth()] + '</h3><span class="label">' + DOWL[d.getDay()] + (sel === TODAY ? " · hoje" : "") + "</span></div>";
-
-  h += block("Eventos", evs.length ? '<ul class="list">' + evs.map(e => eventLine(e)).join("") + "</ul>" : "",
-    '<form class="row" data-add="event"><input class="in" name="time" type="time" aria-label="Hora"><input class="in" name="title" placeholder="novo evento" autocomplete="off" required><button class="plus" aria-label="Adicionar evento">+</button></form>');
-
-  h += block("Hábitos", data.habits.length ? '<div class="hlist">' + data.habits.map(x => habitCheck(x, sel)).join("") + "</div>" : '<p class="empty">Crie hábitos na aba Hábitos.</p>');
-
-  h += block("Treinos", wos.length ? '<ul class="list">' + wos.map(workoutLine).join("") + "</ul>" : "",
-    '<form class="row" data-add="workout"><select class="in" name="type" aria-label="Tipo">' + WTYPES.map(t => "<option>" + t + "</option>").join("") + '</select><input class="in min" name="min" type="number" min="1" inputmode="numeric" placeholder="min" aria-label="Minutos"><button class="plus" aria-label="Adicionar treino">+</button></form>');
-
-  const body = es.length ? '<ul class="list">' + es.map(e => {
-    const it = itemOf(e.item); if (!it) return "";
-    const pages = e.from || e.to ? " · p. " + (e.from || "?") + "–" + (e.to || "?") : "";
-    return '<li class="entry">' + thumb(it, "th") + '<div class="eb"><span class="et">' + esc(it.title) + '</span><span class="meta">' + KINDS[it.kind][0] + pages + "</span></div>" + del("entry", e.id, "Tirar do dia") + "</li>";
-  }).join("") + "</ul>" : "";
-  const open = data.items.filter(i => i.kind === addKind && !i.done);
-  const opts = open.map(i => '<option value="' + i.id + '">' + esc(i.title) + "</option>").join("");
-  let f = '<form class="addentry" data-add="content"><div class="seg two">' +
-    Object.entries(KINDS).map(([k, v]) => '<button type="button" data-kind="' + k + '" aria-pressed="' + (k === addKind) + '">' + v[0] + "</button>").join("") + "</div>";
-  if (addKind === "book") {
-    f += open.length
-      ? '<select class="in" name="pick" aria-label="Livro">' + opts + '</select><div class="pages"><label>da página<input class="in" name="from" type="number" min="1" inputmode="numeric"></label><label>até a página<input class="in" name="to" type="number" min="1" inputmode="numeric" required></label></div><button class="nbtn txt">registrar</button>'
-      : '<p class="empty">Crie um livro na aba Conteúdo primeiro.</p>';
-  } else {
-    f += '<select class="in" name="pick" aria-label="Link">' + opts + '<option value="">+ novo link</option></select>' +
-      '<input class="in" name="url" type="url" placeholder="cole o link"' + (open.length ? " hidden" : "") + '><button class="nbtn txt">registrar</button>';
-  }
-  h += block("Conteúdo", body, f + "</form>");
-
-  $("day").innerHTML = h;
-  prefill();
-}
-function prefill() {
-  const f = $("day").querySelector('[data-add="content"]')?.elements;
-  if (addKind === "book" && f?.pick) f.from.value = lastPage(f.pick.value) + 1;
+  // só aparecem os blocos que têm algo; os hábitos sempre, para marcar
+  if (evs.length) h += block("Eventos", '<ul class="list">' + evs.map(e => eventLine(e)).join("") + "</ul>");
+  if (data.habits.length) h += block("Hábitos", '<div class="hlist">' + data.habits.map(x => habitCheck(x, sel)).join("") + "</div>");
+  if (wos.length) h += block("Treinos", '<ul class="list">' + wos.map(workoutLine).join("") + "</ul>");
+  if (es.length) h += block("Conteúdo", '<ul class="list">' + es.map(entryLine).join("") + "</ul>");
+  if (!evs.length && !wos.length && !es.length && !data.habits.length) h += '<p class="empty">Nada registrado neste dia.</p>';
+  $("day").innerHTML = h + '<button type="button" class="newbtn solid" data-new="day">+ registrar</button>';
 }
 
 function renderHabits() {
@@ -175,7 +179,7 @@ function renderHabits() {
       const s = streak(x.id);
       let dots = "";
       for (let i = 13; i >= 0; i--) { const k = addDays(TODAY, -i); dots += '<i class="' + (done(k, x.id) ? "on" : "") + '" title="' + fmt(k) + '"></i>'; }
-      return '<div class="habit">' + habitCheck(x, TODAY) + del("habit", x.id, "Apagar hábito " + x.name) +
+      return '<div class="habit">' + habitCheck(x, TODAY) + '<button type="button" class="del" data-edit="habit:' + x.id + '" aria-label="Editar hábito ' + esc(x.name) + '">✎</button>' +
         '<div class="hmeta"><span class="dots14">' + dots + '</span><span class="meta">' + (s ? s + (s > 1 ? " dias seguidos" : " dia") : "") + "</span></div></div>";
     }).join("") : '<p class="empty">Nenhum hábito ainda. Crie o primeiro acima.</p>';
 }
@@ -216,12 +220,141 @@ function renderList(kind) {
     const title = it.url ? '<a class="ct" href="' + esc(it.url) + '" target="_blank" rel="noopener">' + esc(it.title) + "</a>" : '<span class="ct">' + esc(it.title) + "</span>";
     return '<article class="card' + (it.done ? " done" : "") + '">' + thumb(it, "cover") + '<div class="cbody">' + title +
       '<span class="cs">' + esc(kind === "book" ? it.author : it.site) + "</span>" + prog +
-      '<span class="meta">' + (days.length ? days.length + (days.length > 1 ? " dias" : " dia") + " · desde " + fmt(days[0]) : "ainda sem registro") + (it.done ? " · terminado" : "") + "</span>" +
-      '<div class="cact"><button type="button" data-done="' + it.id + '">' + (it.done ? "reabrir" : "terminei") + '</button><button type="button" data-ren="' + it.id + '">renomear</button><button type="button" data-idel="' + it.id + '">apagar</button></div></div></article>';
+      '<span class="meta">' + (days.length ? days.length + (days.length > 1 ? " dias" : " dia") + " · desde " + fmt(days[0]) : "ainda sem registro") + (it.done ? " · terminado" : "") + "</span>" + note(it.note) +
+      '<div class="cact"><button type="button" data-done="' + it.id + '">' + (it.done ? "reabrir" : "terminei") + '</button><button type="button" data-edit="item:' + it.id + '">editar</button></div></div></article>';
   }).join("") : '<p class="empty">Nada por aqui ainda.</p>';
 }
 
 function render() { renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); Object.keys(KINDS).forEach(renderList); }
+
+// ---------- folha de criar / editar ----------
+const ADD = { event: "Evento", workout: "Treino", "read-book": "Livro", "read-link": "Link" };
+const NAMES = { event: "evento", workout: "treino", habit: "hábito", book: "livro", link: "link", entry: "registro" };
+let sh = null; // { kind, obj, day, fromDay }
+const fld = (label, inner) => '<label class="fl"><span>' + label + "</span>" + inner + "</label>";
+const inp = (name, attrs, val) => '<input class="in" name="' + name + '" ' + (attrs || "") + ' value="' + esc(val ?? "") + '">';
+const txt = (name, val, ph) => '<textarea class="in" name="' + name + '" rows="2" placeholder="' + (ph || "") + '">' + esc(val || "") + "</textarea>";
+const pair = (a, b) => '<div class="pair">' + a + b + "</div>";
+const pick = (kind, withNew) => '<select class="in" name="pick">' + openItems(kind).map(i => '<option value="' + i.id + '">' + esc(i.title) + "</option>").join("") + (withNew ? '<option value="">+ novo link</option>' : "") + "</select>";
+
+function fields(kind, o, day) {
+  switch (kind) {
+    case "event": return pair(fld("dia", inp("date", 'type="date" required', o?.date || day)), fld("hora", inp("time", 'type="time"', o?.time))) +
+      fld("o quê", inp("title", 'required autocomplete="off" placeholder="ex: aniversário da Ana"', o?.title));
+    case "workout": return fld("tipo", '<select class="in" name="type">' + WTYPES.map(t => "<option" + (t === o?.type ? " selected" : "") + ">" + t + "</option>").join("") + "</select>") +
+      pair(fld("dia", inp("date", 'type="date" required', o?.date || day)), fld("minutos", inp("min", 'type="number" min="1" inputmode="numeric"', o?.min))) +
+      fld("como foi", txt("note", o?.note, "opcional"));
+    case "habit": return fld("nome", inp("name", 'required autocomplete="off" placeholder="ex: beber 2 L de água"', o?.name));
+    case "read-book": return openItems("book").length
+      ? fld("livro", pick("book")) + pair(fld("da página", inp("from", 'type="number" min="1" inputmode="numeric"')), fld("até a página", inp("to", 'type="number" min="1" inputmode="numeric" required'))) + fld("nota", txt("note", "", "uma frase, uma ideia… (opcional)"))
+      : '<p class="empty">Nenhum livro em andamento. Crie um em Conteúdo → Livros.</p>';
+    case "read-link": return fld("link", pick("link", true)) + inp("url", 'type="url" placeholder="cole o link do podcast, artigo, vídeo…"' + (openItems("link").length ? " hidden" : "")) + fld("nota", txt("note", "", "opcional"));
+    case "entry": {
+      const it = itemOf(o.item);
+      return '<p class="shitem">' + thumb(it, "th") + "<b>" + esc(it.title) + "</b></p>" +
+        (it.kind === "book" ? pair(fld("da página", inp("from", 'type="number" min="1" inputmode="numeric"', o.from)), fld("até a página", inp("to", 'type="number" min="1" inputmode="numeric"', o.to))) : "") +
+        fld("dia", inp("date", 'type="date" required', day)) + fld("nota", txt("note", o.note, "opcional"));
+    }
+    case "book": return fld("título", inp("title", 'required autocomplete="off"', o?.title)) + fld("autor(a)", inp("author", 'autocomplete="off"', o?.author)) +
+      pair(fld("páginas", inp("pages", 'type="number" min="1" inputmode="numeric"', o?.pages)), fld("capa (link)", inp("cover", 'type="url" placeholder="vazio: eu procuro"', o?.image))) +
+      fld("nota", txt("note", o?.note, "o que achou (opcional)"));
+    case "link": return o
+      ? fld("título", inp("title", 'required autocomplete="off"', o.title)) + fld("endereço", inp("url", 'type="url" required', o.url)) + fld("nota", txt("note", o.note, "opcional"))
+      : fld("link", inp("url", 'type="url" required placeholder="cole o link do podcast, artigo, vídeo…"')) + '<label class="chk"><input type="checkbox" name="today" checked> consumi hoje</label>';
+  }
+}
+function drawSheet() {
+  const { kind, obj, day, fromDay } = sh;
+  $("shtitle").textContent = fromDay ? "registrar · " + fmt(day) : (obj ? "editar " : "novo ") + NAMES[kind];
+  $("shseg").hidden = !fromDay;
+  $("shseg").innerHTML = Object.entries(ADD).map(([k, v]) => '<button type="button" data-sk="' + k + '" aria-pressed="' + (k === kind) + '">' + v + "</button>").join("");
+  $("shfields").innerHTML = fields(kind, obj, day);
+  $("shdel").hidden = !obj;
+  const btn = $("shsave");
+  btn.disabled = kind === "read-book" && !openItems("book").length;
+  btn.textContent = "salvar";
+  prefillPages();
+}
+function prefillPages() {
+  const f = $("shform").elements;
+  if (sh.kind === "read-book" && f.pick) f.from.value = lastPage(f.pick.value) + 1;
+}
+function openSheet(kind, obj = null, day = sel, fromDay = false) {
+  sh = { kind, obj, day, fromDay };
+  drawSheet();
+  $("sheet").showModal();
+}
+const closeSheet = () => { $("sheet").close(); sh = null; };
+$("shclose").onclick = closeSheet;
+$("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(); }); // toque fora fecha
+$("shseg").onclick = e => { const b = e.target.closest("[data-sk]"); if (b) { sh.kind = lastAdd = b.dataset.sk; drawSheet(); } };
+$("shfields").addEventListener("change", e => {
+  if (e.target.name !== "pick") return;
+  const url = $("shform").elements.url;
+  if (url && sh.kind === "read-link") { url.hidden = !!e.target.value; url.required = !e.target.value; if (!url.hidden) url.focus(); }
+  prefillPages();
+});
+const upsert = (arr, obj, vals) => obj ? Object.assign(obj, vals) : arr.push({ id: uid(), ...vals });
+
+$("shform").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target.elements, { kind, obj, day } = sh, v = n => (f[n]?.value ?? "").trim(), btn = $("shsave");
+  const busy = t => { btn.disabled = true; btn.textContent = t; };
+  if (kind === "event") upsert(data.events, obj, { date: v("date"), time: v("time"), title: v("title") });
+  else if (kind === "workout") upsert(data.workouts, obj, { date: v("date"), type: v("type"), min: +v("min") || null, note: v("note") });
+  else if (kind === "habit") upsert(data.habits, obj, { name: v("name") });
+  else if (kind === "read-book" || kind === "read-link") {
+    let id = v("pick");
+    if (!id && kind === "read-link") {
+      if (!v("url")) return f.url.focus();
+      busy("buscando…");
+      id = newLink(await preview(v("url"))).id;
+    }
+    if (!id) return;
+    const en = { id: uid(), item: id, note: v("note") };
+    if (kind === "read-book") { en.from = +v("from") || null; en.to = +v("to") || null; }
+    (data.days[day] ||= []).push(en);
+  } else if (kind === "entry") {
+    obj.note = v("note");
+    if (f.from) { obj.from = +v("from") || null; obj.to = +v("to") || null; }
+    const nd = v("date");
+    if (nd && nd !== day) { // mudou de dia
+      data.days[day] = data.days[day].filter(x => x !== obj);
+      if (!data.days[day].length) delete data.days[day];
+      (data.days[nd] ||= []).push(obj);
+    }
+  } else if (kind === "book") {
+    const o = obj || { id: uid(), kind: "book", created: TODAY };
+    Object.assign(o, { title: v("title"), author: v("author"), pages: +v("pages") || null, note: v("note") });
+    if (v("cover")) o.image = v("cover");
+    else { busy("procurando capa…"); o.image = await findCover(o.title, o.author); }
+    if (!obj) data.items.push(o);
+  } else if (kind === "link") {
+    if (obj) Object.assign(obj, { title: v("title"), url: v("url"), note: v("note") });
+    else {
+      busy("buscando…");
+      const it = newLink(await preview(v("url")));
+      if (f.today.checked) (data.days[TODAY] ||= []).push({ id: uid(), item: it.id });
+    }
+  }
+  closeSheet(); save();
+};
+$("shdel").onclick = () => {
+  const { kind, obj, day } = sh;
+  if (kind === "entry") { data.days[day] = data.days[day].filter(x => x !== obj); if (!data.days[day].length) delete data.days[day]; }
+  else if (kind === "event") data.events = data.events.filter(x => x !== obj);
+  else if (kind === "workout") data.workouts = data.workouts.filter(x => x !== obj);
+  else if (kind === "habit") {
+    if (!confirm("Apagar este hábito e o histórico dele?")) return;
+    data.habits = data.habits.filter(x => x !== obj);
+    for (const k in data.checks) { delete data.checks[k][obj.id]; if (!Object.keys(data.checks[k]).length) delete data.checks[k]; }
+  } else {
+    if (!confirm("Apagar \"" + obj.title + "\" e todos os registros dele?")) return;
+    data.items = data.items.filter(x => x !== obj);
+    for (const k in data.days) { data.days[k] = data.days[k].filter(x => x.item !== obj.id); if (!data.days[k].length) delete data.days[k]; }
+  }
+  closeSheet(); save();
+};
 
 // ---------- ações ----------
 $("mprev").onclick = () => { view = new Date(view.getFullYear(), view.getMonth() - 1, 1); renderCal(); };
@@ -234,80 +367,6 @@ $("cal").onclick = e => {
     $("day").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block: "start" });
 };
 
-$("day").addEventListener("click", e => {
-  const k = e.target.closest("[data-kind]"); if (k) { addKind = k.dataset.kind; renderDay(); }
-});
-$("day").addEventListener("change", e => {
-  if (e.target.name !== "pick") return;
-  const url = e.target.form.elements.url;
-  if (url) { url.hidden = !!e.target.value; if (!url.hidden) url.focus(); }
-  prefill();
-});
-$("day").addEventListener("submit", async e => {
-  e.preventDefault();
-  const form = e.target, f = form.elements, what = form.dataset.add;
-  if (what === "event") data.events.push({ id: uid(), date: sel, time: f.time.value, title: f.title.value.trim() });
-  else if (what === "workout") data.workouts.push({ id: uid(), date: sel, type: f.type.value, min: +f.min.value || null, note: "" });
-  else {
-    let id = f.pick?.value;
-    if (addKind === "link" && !id) {
-      const url = f.url.value.trim(); if (!url) return f.url.focus();
-      const btn = form.querySelector(".nbtn"); btn.disabled = true; btn.textContent = "buscando…";
-      id = newLink(await preview(url)).id;
-    }
-    if (!id) return;
-    const en = { id: uid(), item: id };
-    if (addKind === "book") { en.from = +f.from.value || null; en.to = +f.to.value || null; }
-    (data.days[sel] ||= []).push(en);
-  }
-  save();
-});
-
-function newLink(p) {
-  const it = { id: uid(), kind: "link", url: p.url, title: p.title, image: p.image, site: p.site, desc: p.desc, created: TODAY };
-  data.items.push(it);
-  return it;
-}
-const closeBox = form => { form.reset(); const d = form.closest("details"); if (d) d.open = false; };
-$("addlink").onsubmit = async e => {
-  e.preventDefault();
-  const form = e.target, f = form.elements, btn = form.querySelector("button");
-  btn.disabled = true; btn.textContent = "buscando…";
-  const it = newLink(await preview(f.url.value.trim()));
-  if (f.today.checked) (data.days[TODAY] ||= []).push({ id: uid(), item: it.id });
-  btn.disabled = false; btn.textContent = "adicionar"; closeBox(form);
-  save();
-};
-$("addbook").onsubmit = async e => {
-  e.preventDefault();
-  const form = e.target, f = form.elements, btn = form.querySelector("button"), title = f.title.value.trim(), author = f.author.value.trim();
-  btn.disabled = true; btn.textContent = "procurando capa…";
-  const image = f.cover.value.trim() || await findCover(title, author);
-  data.items.push({ id: uid(), kind: "book", title, author, pages: +f.pages.value || null, image, created: TODAY });
-  btn.disabled = false; btn.textContent = "criar livro"; closeBox(form);
-  save();
-};
-$("addhabit").onsubmit = e => {
-  e.preventDefault();
-  data.habits.push({ id: uid(), name: e.target.elements.name.value.trim() });
-  closeBox(e.target); save();
-};
-$("addworkout").elements.type.innerHTML = WTYPES.map(t => "<option>" + t + "</option>").join("");
-$("addworkout").onsubmit = e => {
-  e.preventDefault();
-  const f = e.target.elements;
-  data.workouts.push({ id: uid(), date: f.date.value, type: f.type.value, min: +f.min.value || null, note: f.note.value.trim() });
-  closeBox(e.target); save();
-};
-$("addevent").onsubmit = e => {
-  e.preventDefault();
-  const f = e.target.elements;
-  data.events.push({ id: uid(), date: f.date.value, time: f.time.value, title: f.title.value.trim() });
-  closeBox(e.target); save();
-};
-// os formulários de data começam no dia de hoje
-document.querySelectorAll('input[type=date]').forEach(i => { i.defaultValue = TODAY; });
-
 document.addEventListener("change", e => {
   const t = e.target; if (!t.dataset.hk) return;
   const c = data.checks[t.dataset.day] ||= {};
@@ -316,30 +375,20 @@ document.addEventListener("change", e => {
   save();
 });
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-done],[data-ren],[data-idel],[data-del]"); if (!b) return;
-  if (b.dataset.del) {
-    const [what, id] = b.dataset.del.split(":");
-    if (what === "entry") {
-      data.days[sel] = (data.days[sel] || []).filter(x => x.id !== id);
-      if (!data.days[sel].length) delete data.days[sel];
-    } else if (what === "workout") data.workouts = data.workouts.filter(x => x.id !== id);
-    else if (what === "event") data.events = data.events.filter(x => x.id !== id);
-    else if (what === "habit") {
-      if (!confirm("Apagar este hábito e o histórico dele?")) return;
-      data.habits = data.habits.filter(x => x.id !== id);
-      for (const k in data.checks) { delete data.checks[k][id]; if (!Object.keys(data.checks[k]).length) delete data.checks[k]; }
-    }
-  } else {
-    const it = itemOf(b.dataset.done || b.dataset.ren || b.dataset.idel); if (!it) return;
-    if (b.dataset.done) it.done = !it.done;
-    else if (b.dataset.ren) { const t = prompt("Novo título:", it.title); if (!t?.trim()) return; it.title = t.trim(); }
-    else {
-      if (!confirm("Apagar \"" + it.title + "\" e todos os registros dele?")) return;
-      data.items = data.items.filter(x => x !== it);
-      for (const k in data.days) { data.days[k] = data.days[k].filter(x => x.item !== it.id); if (!data.days[k].length) delete data.days[k]; }
-    }
+  const n = e.target.closest("[data-new]");
+  if (n) return n.dataset.new === "day" ? openSheet(lastAdd, null, sel, true) : openSheet(n.dataset.new, null, TODAY);
+  const ed = e.target.closest("[data-edit]");
+  if (ed) {
+    const [what, id] = ed.dataset.edit.split(":");
+    if (what === "event") return openSheet("event", data.events.find(x => x.id === id));
+    if (what === "workout") return openSheet("workout", data.workouts.find(x => x.id === id));
+    if (what === "habit") return openSheet("habit", data.habits.find(x => x.id === id));
+    if (what === "entry") return openSheet("entry", (data.days[sel] || []).find(x => x.id === id), sel);
+    const it = itemOf(id); if (it) return openSheet(it.kind, it);
+    return;
   }
-  save();
+  const d = e.target.closest("[data-done]");
+  if (d) { const it = itemOf(d.dataset.done); if (it) { it.done = !it.done; save(); } }
 });
 
 $("tabbar").onclick = e => {
@@ -391,11 +440,16 @@ $("forgot").onclick = async () => {
   msg.textContent = error ? "Não deu: " + error.message : "Enviamos um link para criar uma senha nova.";
 };
 $("logout").onclick = async () => {
+  if (pending() && !confirm("Ainda há mudanças que não subiram para a nuvem. Sair mesmo assim?")) return;
   if (!confirm("Sair da aurora neste aparelho?")) return;
   await sb.auth.signOut();
-  try { localStorage.removeItem(KEY); } catch {}
+  ls(KEY); ls(PENDING);
   data = norm(); render();
 };
-document.addEventListener("visibilitychange", () => { if (!document.hidden && user) pull(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  if (setToday()) render();
+  if (user) pull();
+});
 
 render();
