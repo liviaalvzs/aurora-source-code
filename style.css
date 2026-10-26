@@ -6,9 +6,6 @@
   --f-mono:"DM Mono",ui-monospace,monospace;
   color-scheme:light;
 }
-@media (prefers-color-scheme:dark){:root{
-  --bg:#141615; --paper:#1b1d1c; --ink:#e7e8e6; --soft:#b3b7b5; --muted:#7f8582; --hair:#2b2f2d; --hover:#222524;
-  --accent:#8fb39a; --accent-soft:#223028; --rem:#89a8cc; color-scheme:dark;}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-sans);-webkit-font-smoothing:antialiased}
 .wrap{max-width:1000px;margin:0 auto;padding:40px max(16px,env(safe-area-inset-right)) 72px max(16px,env(safe-area-inset-left));display:grid;gap:32px}
