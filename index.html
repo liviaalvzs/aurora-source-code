@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Meu Caderno</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Figtree:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Meu <em>Caderno</em></h1>
+    <div class="dayhead">
+      <button type="button" class="nbtn" id="prev" aria-label="Dia anterior">←</button>
+      <div>
+        <span class="label" id="dow"></span>
+        <h2 id="date"></h2>
+      </div>
+      <button type="button" class="nbtn" id="next" aria-label="Próximo dia">→</button>
+      <button type="button" class="nbtn txt" id="tod" hidden>hoje</button>
+    </div>
+    <div class="week" id="week" aria-label="Últimos 7 dias"></div>
+  </header>
+
+  <main class="cols">
+    <section class="sec">
+      <div class="sech"><h3>Hábitos</h3><span class="label" id="hcount"></span></div>
+      <ul class="list" id="habits"></ul>
+      <form class="addform" id="addhabit">
+        <input class="in" name="name" placeholder="novo hábito, ex: beber 2 L de água" autocomplete="off" required>
+        <button class="add">+ adicionar</button>
+      </form>
+    </section>
+
+    <section class="sec">
+      <div class="sech"><h3>Lembretes</h3><span class="label" id="rcount"></span></div>
+      <ul class="list" id="reminders"></ul>
+      <form class="addform" id="addrem">
+        <input class="in time" name="time" type="time" aria-label="Horário (opcional)">
+        <input class="in" name="text" placeholder="novo lembrete, ex: tomar vitamina" autocomplete="off" required>
+        <button class="add">+ adicionar</button>
+      </form>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
