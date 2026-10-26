@@ -88,5 +88,13 @@ $("addrem").onsubmit = e => {
   data.reminders.push({ id: crypto.randomUUID(), text, time: e.target.elements.time.value });
   e.target.reset(); save(); render();
 };
+$("tabbar").onclick = e => {
+  const b = e.target.closest("[data-tab]"); if (!b) return;
+  $("tabbar").querySelectorAll("[data-tab]").forEach(x => {
+    const on = x === b;
+    x.setAttribute("aria-pressed", on);
+    $(x.dataset.tab).hidden = !on;
+  });
+};
 
 render();

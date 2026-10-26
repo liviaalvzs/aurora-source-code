@@ -3,29 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fbfaf7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>aurora</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Nunito:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>aurora</h1>
-    <div class="dayhead">
-      <button type="button" class="nbtn" id="prev" aria-label="Dia anterior">←</button>
-      <div>
-        <span class="label" id="dow"></span>
-        <h2 id="date"></h2>
-      </div>
-      <button type="button" class="nbtn" id="next" aria-label="Próximo dia">→</button>
-      <button type="button" class="nbtn txt" id="tod" hidden>hoje</button>
-    </div>
-    <div class="week" id="week" aria-label="Últimos 7 dias"></div>
-  </header>
+<header class="appbar">
+  <h1>aurora</h1>
+  <button type="button" class="nbtn txt" id="tod" hidden>hoje</button>
+</header>
 
-  <main class="cols">
-    <section class="sec">
+<div class="wrap">
+  <div class="dayhead">
+    <button type="button" class="nbtn" id="prev" aria-label="Dia anterior">←</button>
+    <div>
+      <span class="label" id="dow"></span>
+      <h2 id="date"></h2>
+    </div>
+    <button type="button" class="nbtn" id="next" aria-label="Próximo dia">→</button>
+  </div>
+  <div class="week" id="week" aria-label="Últimos 7 dias"></div>
+
+  <main>
+    <section class="sec" id="tab-habits">
       <div class="sech"><h3>Hábitos</h3><span class="label" id="hcount"></span></div>
       <ul class="list" id="habits"></ul>
       <form class="addform" id="addhabit">
@@ -34,7 +38,7 @@
       </form>
     </section>
 
-    <section class="sec">
+    <section class="sec" id="tab-reminders" hidden>
       <div class="sech"><h3>Lembretes</h3><span class="label" id="rcount"></span></div>
       <ul class="list" id="reminders"></ul>
       <form class="addform" id="addrem">
@@ -45,6 +49,11 @@
     </section>
   </main>
 </div>
+
+<nav class="tabbar" id="tabbar">
+  <button type="button" data-tab="tab-habits" aria-pressed="true"><span class="ico">✓</span>Hábitos</button>
+  <button type="button" data-tab="tab-reminders" aria-pressed="false"><span class="ico">◷</span>Lembretes</button>
+</nav>
 <script src="app.js"></script>
 </body>
 </html>
