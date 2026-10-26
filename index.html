@@ -40,53 +40,95 @@
       <button type="button" class="nbtn" id="mnext" aria-label="Próximo mês">→</button>
     </div>
     <div class="cal" id="cal"></div>
+    <div class="legend"><span><i class="mk ev"></i>evento</span><span><i class="mk wo"></i>treino</span><span><i class="hb"><i style="width:60%"></i></i>hábitos</span></div>
     <div class="sec" id="day"></div>
   </section>
 
-  <section class="tab" id="tab-book" hidden>
+  <section class="tab" id="tab-hab" hidden>
     <details class="sec addbox">
-    <summary>+ novo livro</summary>
-    <form class="addform" id="addbook">
-      <input class="in" name="title" placeholder="título" autocomplete="off" required>
-      <input class="in" name="author" placeholder="autor(a)" autocomplete="off">
-      <input class="in" name="pages" type="number" min="1" inputmode="numeric" placeholder="nº de páginas">
-      <input class="in" name="cover" type="url" placeholder="link da capa (opcional, senão eu procuro)">
-      <button class="nbtn txt">criar livro</button>
-    </form>
+      <summary>+ novo hábito</summary>
+      <form class="addform" id="addhabit">
+        <input class="in" name="name" placeholder="ex: beber 2 L de água" autocomplete="off" required>
+        <button class="nbtn txt">criar hábito</button>
+      </form>
     </details>
-    <div class="cards" id="list-book"></div>
+    <div class="sec" id="habits"></div>
   </section>
 
-  <section class="tab" id="tab-podcast" hidden>
+  <section class="tab" id="tab-wo" hidden>
     <details class="sec addbox">
-    <summary>+ novo podcast</summary>
-    <form class="addform addlink" data-kind="podcast">
-      <input class="in" name="url" type="url" placeholder="cole o link do episódio" required>
-      <label class="chk"><input type="checkbox" name="today" checked> ouvi hoje</label>
-      <button class="nbtn txt">adicionar</button>
-    </form>
+      <summary>+ novo treino</summary>
+      <form class="addform" id="addworkout">
+        <div class="pages">
+          <label>dia<input class="in" name="date" type="date" required></label>
+          <label>minutos<input class="in" name="min" type="number" min="1" inputmode="numeric"></label>
+        </div>
+        <select class="in" name="type" aria-label="Tipo de treino"></select>
+        <input class="in" name="note" placeholder="como foi (opcional)" autocomplete="off">
+        <button class="nbtn txt">registrar treino</button>
+      </form>
     </details>
-    <div class="cards" id="list-podcast"></div>
+    <div class="sec" id="wosum"></div>
+    <div class="sec" id="wolist"></div>
   </section>
 
-  <section class="tab" id="tab-text" hidden>
+  <section class="tab" id="tab-ev" hidden>
     <details class="sec addbox">
-    <summary>+ novo texto</summary>
-    <form class="addform addlink" data-kind="text">
-      <input class="in" name="url" type="url" placeholder="cole o link do artigo" required>
-      <label class="chk"><input type="checkbox" name="today" checked> li hoje</label>
-      <button class="nbtn txt">adicionar</button>
-    </form>
+      <summary>+ novo evento</summary>
+      <form class="addform" id="addevent">
+        <div class="pages">
+          <label>dia<input class="in" name="date" type="date" required></label>
+          <label>hora (opcional)<input class="in" name="time" type="time"></label>
+        </div>
+        <input class="in" name="title" placeholder="ex: aniversário da Ana" autocomplete="off" required>
+        <button class="nbtn txt">criar evento</button>
+      </form>
     </details>
-    <div class="cards" id="list-text"></div>
+    <div class="sec" id="evnext"></div>
+    <details class="sec addbox" id="evpastbox">
+      <summary>eventos passados</summary>
+      <div class="addform" id="evpast"></div>
+    </details>
+  </section>
+
+  <section class="tab" id="tab-ct" hidden>
+    <div class="seg two" id="cseg">
+      <button type="button" data-c="book" aria-pressed="true">Livros</button>
+      <button type="button" data-c="link" aria-pressed="false">Links</button>
+    </div>
+    <div class="tab" id="c-book">
+      <details class="sec addbox">
+        <summary>+ novo livro</summary>
+        <form class="addform" id="addbook">
+          <input class="in" name="title" placeholder="título" autocomplete="off" required>
+          <input class="in" name="author" placeholder="autor(a)" autocomplete="off">
+          <input class="in" name="pages" type="number" min="1" inputmode="numeric" placeholder="nº de páginas">
+          <input class="in" name="cover" type="url" placeholder="link da capa (opcional, senão eu procuro)">
+          <button class="nbtn txt">criar livro</button>
+        </form>
+      </details>
+      <div class="cards" id="list-book"></div>
+    </div>
+    <div class="tab" id="c-link" hidden>
+      <details class="sec addbox">
+        <summary>+ novo link</summary>
+        <form class="addform" id="addlink">
+          <input class="in" name="url" type="url" placeholder="cole o link do podcast, artigo, vídeo…" required>
+          <label class="chk"><input type="checkbox" name="today" checked> consumi hoje</label>
+          <button class="nbtn txt">adicionar</button>
+        </form>
+      </details>
+      <div class="cards" id="list-link"></div>
+    </div>
   </section>
 </div>
 
 <nav class="tabbar" id="tabbar">
   <button type="button" data-tab="tab-cal" aria-pressed="true"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Dias</button>
-  <button type="button" data-tab="tab-book" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.5-1 5.5-1 8 .8 2.5-1.8 5.5-1.8 8-.8v13c-2.5-1-5.5-1-8 .8-2.5-1.8-5.5-1.8-8-.8z"/><path d="M12 6.3v13.3"/></svg>Livros</button>
-  <button type="button" data-tab="tab-podcast" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3.5" y="14" width="4" height="6" rx="1.5"/><rect x="16.5" y="14" width="4" height="6" rx="1.5"/></svg>Podcasts</button>
-  <button type="button" data-tab="tab-text" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7l4.5 4.5v12.5H7z"/><path d="M14 3.5V8h4.5M9.5 12.5h6M9.5 16h6"/></svg>Textos</button>
+  <button type="button" data-tab="tab-hab" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8.2 12.3l2.6 2.6 5-5.4"/></svg>Hábitos</button>
+  <button type="button" data-tab="tab-wo" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6H21"/></svg>Treinos</button>
+  <button type="button" data-tab="tab-ev" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4h11l-2.5 4L17 12H6"/></svg>Eventos</button>
+  <button type="button" data-tab="tab-ct" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.5-1 5.5-1 8 .8 2.5-1.8 5.5-1.8 8-.8v13c-2.5-1-5.5-1-8 .8-2.5-1.8-5.5-1.8-8-.8z"/><path d="M12 6.3v13.3"/></svg>Conteúdo</button>
 </nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 <script src="app.js"></script>

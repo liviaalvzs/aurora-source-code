@@ -35,7 +35,7 @@ a{color:inherit}
 .nbtn.txt:active{box-shadow:none;transform:translate(2px,3px)}
 .appbar .nbtn.txt{height:36px;box-shadow:none;font-size:.9rem;padding:0 14px}
 .nbtn.ghost{border-style:dashed;box-shadow:none}
-:is(.nbtn,.add,.tabbar button,.cd,.seg button,.cact button,summary,.del):focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+:is(.nbtn,.add,.tabbar button,.cd,.seg button,.cact button,summary,.del,.plus):focus-visible{outline:2px solid var(--ink);outline-offset:3px}
 
 .sec{background:var(--paper);border:var(--line);border-radius:var(--r);padding:18px 16px;display:grid;gap:12px;min-width:0;box-shadow:var(--shadow)}
 .sech{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
@@ -98,8 +98,7 @@ select.in{cursor:pointer;padding-right:34px;background:var(--paper) url("data:im
 .card.done{box-shadow:none;border-color:var(--hair)}
 .card.done .cover{filter:grayscale(1) opacity(.55)}
 .cover{width:72px;height:100px;object-fit:cover;border:var(--line);border-radius:8px;font-size:1.6rem;background:var(--wash)}
-#list-podcast .cover{width:72px;height:72px}
-#list-text .cover{width:88px;height:66px}
+#list-link .cover{width:80px;height:64px}
 .cbody{display:grid;gap:3px;align-content:start;min-width:0}
 .ct{font-family:var(--f-head);font-weight:700;font-size:1.05rem;line-height:1.2;overflow-wrap:anywhere;text-decoration:none;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
@@ -110,11 +109,58 @@ select.in{cursor:pointer;padding-right:34px;background:var(--paper) url("data:im
 .cact button{all:unset;cursor:pointer;font-weight:700;font-size:.82rem;color:var(--soft);padding:10px 8px;border-radius:10px}
 .cact button:active{background:var(--hover);color:var(--ink)}
 
+/* marcas do calendário */
+.mk{display:inline-block;width:8px;height:8px;flex:none;align-self:center}
+.mk.ev{border-radius:99px;background:var(--ink)}
+.mk.wo{border:1.5px solid var(--ink);border-radius:2px;transform:rotate(45deg) scale(.85)}
+.hb{display:block;width:70%;height:3px;border-radius:99px;background:var(--wash);overflow:hidden;margin-top:auto}
+.hb i{display:block;height:100%;background:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.75rem;color:var(--soft);margin-top:-8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend .hb{width:22px;margin:0}
+
+/* blocos do dia */
+.block{display:grid;gap:8px;padding-top:14px;border-top:1px solid var(--hair)}
+.line{display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid var(--hair);min-height:44px}
+.line:last-child{border-bottom:0}
+.line .eb,.line .et{flex:1}
+.when{font-family:var(--f-head);font-weight:700;font-size:.85rem;min-width:54px;white-space:nowrap}
+.dayhead{list-style:none;font-weight:700;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:12px 0 2px}
+.dayhead:first-child{padding-top:0}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center}
+.row .in[type=time]{width:104px}
+.row select.in{min-width:0}
+.row .in.min{width:76px}
+.plus{all:unset;box-sizing:border-box;width:46px;height:46px;display:grid;place-items:center;border:var(--line);border-radius:var(--r);font-size:1.4rem;font-weight:700;cursor:pointer;background:var(--paper)}
+.plus:active{background:var(--ink);color:var(--paper)}
+.plus:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.seg.two{grid-template-columns:repeat(2,1fr)}
+
+/* hábitos */
+.hlist{display:grid}
+.hrow{display:flex;align-items:center;gap:12px;min-height:44px;cursor:pointer;flex:1;min-width:0}
+.hrow span{overflow-wrap:anywhere}
+.hrow input{appearance:none;flex:none;width:24px;height:24px;margin:0;border:var(--line);border-radius:8px;display:grid;place-content:center;cursor:pointer;background:var(--paper)}
+.hrow input:checked{background:var(--ink)}
+.hrow input:checked::after{content:"";width:5px;height:10px;border:solid var(--paper);border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-.5px,-1px)}
+.hrow input:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.hrow:has(input:checked) span{color:var(--muted);text-decoration:line-through}
+.habit{display:flex;flex-wrap:wrap;align-items:center;padding:6px 0 10px;border-bottom:1px solid var(--hair)}
+.habit:last-child{border-bottom:0}
+.hmeta{flex-basis:100%;display:flex;align-items:center;gap:12px;padding-left:36px}
+.dots14{display:flex;gap:3px}
+.dots14 i{width:9px;height:9px;border-radius:3px;background:var(--wash)}
+.dots14 i.on{background:var(--ink)}
+
+/* treinos */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:var(--line);border-radius:99px;padding:5px 12px;font-size:.85rem}
+
 /* abas embaixo, como em app */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;justify-content:center;
   padding:6px max(8px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) max(8px,env(safe-area-inset-left));
   background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--hair)}
-.tabbar button{all:unset;box-sizing:border-box;flex:1;max-width:140px;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;
+.tabbar button{all:unset;box-sizing:border-box;flex:1;min-width:0;max-width:120px;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;
   font-size:.7rem;font-weight:700;color:var(--muted);border-radius:14px}
 .tabbar .ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .tabbar button[aria-pressed="true"]{color:var(--ink)}
