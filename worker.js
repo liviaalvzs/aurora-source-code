@@ -9,9 +9,23 @@ const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", "#39": "'", nbsp
 const decode = s => s.replace(/&(#x[\da-f]+|#\d+|\w+);/gi, (m, e) =>
   e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : +e.slice(1)) : ENT[e.toLowerCase()] ?? m);
 
+// Google Books só responde com chave; ela fica no segredo GOOGLE_BOOKS_KEY do Worker. Sem chave, devolve vazio e o app usa o Open Library.
+async function book(q, key) {
+  if (!key || !q) return json({});
+  try {
+    const r = await fetch("https://www.googleapis.com/books/v1/volumes?" + new URLSearchParams({ q, maxResults: "5", key }), { cf: { cacheTtl: 86400 } });
+    const items = (await r.json()).items || [];
+    const v = (items.find(i => i.volumeInfo?.imageLinks) || items[0])?.volumeInfo;
+    if (!v) return json({});
+    const img = v.imageLinks?.thumbnail || v.imageLinks?.smallThumbnail || "";
+    return json({ title: v.title, author: (v.authors || []).join(", "), pages: v.pageCount || null, image: img.replace(/^http:/, "https:").replace("&edge=curl", "") });
+  } catch { return json({}); }
+}
+
 export default {
   async fetch(req, env) {
     const u = new URL(req.url);
+    if (u.pathname === "/api/book") return book(u.searchParams.get("q") || "", env.GOOGLE_BOOKS_KEY);
     if (u.pathname !== "/api/preview") return env.ASSETS.fetch(req);
 
     let target;

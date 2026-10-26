@@ -103,14 +103,28 @@ async function preview(url) {
   const host = new URL(url).hostname.replace(/^www\./, "");
   return { url, title: host, image: "", site: host, desc: "" };
 }
-async function findCover(title, author) {
+// Procura o livro: Google Books (pelo Worker, se tiver chave) e, sem capa lá, Open Library. Com ISBN acerta a edição.
+async function lookupBook(title, author, isbn) {
+  isbn = isbn.replace(/[^\dX]/gi, "");
+  let g = {};
   try {
-    const q = new URLSearchParams({ title, limit: 1, fields: "cover_i" });
-    if (author) q.set("author", author);
-    const r = await fetch("https://openlibrary.org/search.json?" + q, { signal: AbortSignal.timeout(6000) });
-    const id = (await r.json()).docs?.[0]?.cover_i;
-    return id ? "https://covers.openlibrary.org/b/id/" + id + "-M.jpg" : "";
-  } catch { return ""; }
+    const q = isbn ? "isbn:" + isbn : "intitle:" + title + (author ? " inauthor:" + author : "");
+    g = await (await fetch("/api/book?q=" + encodeURIComponent(q), { signal: AbortSignal.timeout(6000) })).json();
+    if (g.image) return g;
+  } catch {}
+  try {
+    const p = new URLSearchParams({ limit: 5, fields: "title,author_name,number_of_pages_median,cover_i" });
+    if (isbn) p.set("isbn", isbn); else p.set("q", (title + " " + author).trim()); // texto livre acha mais que título/autor separados
+    const docs = (await (await fetch("https://openlibrary.org/search.json?" + p, { signal: AbortSignal.timeout(6000) })).json()).docs || [];
+    const d = docs.find(x => x.cover_i) || docs[0];
+    if (d) return {
+      title: g.title || d.title, pages: g.pages || d.number_of_pages_median || null,
+      // o mesmo autor costuma vir com e sem acento: fica um só
+      author: g.author || [...new Map((d.author_name || []).map(n => [n.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase(), n])).values()].join(", "),
+      image: d.cover_i ? "https://covers.openlibrary.org/b/id/" + d.cover_i + "-M.jpg" : "",
+    };
+  } catch {}
+  return g;
 }
 function newLink(p) {
   const it = { id: uid(), kind: "link", url: p.url, title: p.title, image: p.image, site: p.site, desc: p.desc, created: TODAY };
@@ -255,8 +269,9 @@ function fields(kind, o, day) {
         (it.kind === "book" ? pair(fld("da página", inp("from", 'type="number" min="1" inputmode="numeric"', o.from)), fld("até a página", inp("to", 'type="number" min="1" inputmode="numeric"', o.to))) : "") +
         fld("dia", inp("date", 'type="date" required', day)) + fld("nota", txt("note", o.note, "opcional"));
     }
-    case "book": return fld("título", inp("title", 'required autocomplete="off"', o?.title)) + fld("autor(a)", inp("author", 'autocomplete="off"', o?.author)) +
-      pair(fld("páginas", inp("pages", 'type="number" min="1" inputmode="numeric"', o?.pages)), fld("capa (link)", inp("cover", 'type="url" placeholder="vazio: eu procuro"', o?.image))) +
+    case "book": return fld("título", inp("title", 'autocomplete="off" placeholder="ou só o ISBN abaixo"', o?.title)) + fld("autor(a)", inp("author", 'autocomplete="off"', o?.author)) +
+      pair(fld("ISBN", inp("isbn", 'inputmode="numeric" autocomplete="off" placeholder="verso do livro"', o?.isbn)), fld("páginas", inp("pages", 'type="number" min="1" inputmode="numeric"', o?.pages))) +
+      fld("capa (link)", inp("cover", 'type="url" placeholder="vazio: eu procuro"', o?.image)) +
       fld("nota", txt("note", o?.note, "o que achou (opcional)"));
     case "link": return o
       ? fld("título", inp("title", 'required autocomplete="off"', o.title)) + fld("endereço", inp("url", 'type="url" required', o.url)) + fld("nota", txt("note", o.note, "opcional"))
@@ -325,9 +340,15 @@ $("shform").onsubmit = async e => {
     }
   } else if (kind === "book") {
     const o = obj || { id: uid(), kind: "book", created: TODAY };
-    Object.assign(o, { title: v("title"), author: v("author"), pages: +v("pages") || null, note: v("note") });
-    if (v("cover")) o.image = v("cover");
-    else { busy("procurando capa…"); o.image = await findCover(o.title, o.author); }
+    let title = v("title"), author = v("author"), pages = +v("pages") || null, image = v("cover");
+    const isbn = v("isbn");
+    if (!title && !isbn) return f.title.focus();
+    if (!image || !title) { // falta capa ou título: procura e completa só o que estiver vazio
+      busy("procurando o livro…");
+      const b = await lookupBook(title, author, isbn);
+      title ||= b.title || "ISBN " + isbn; author ||= b.author || ""; pages ||= b.pages || null; image ||= b.image || "";
+    }
+    Object.assign(o, { title, author, pages, image, isbn, note: v("note") });
     if (!obj) data.items.push(o);
   } else if (kind === "link") {
     if (obj) Object.assign(obj, { title: v("title"), url: v("url"), note: v("note") });
