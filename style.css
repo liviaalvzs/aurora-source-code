@@ -179,12 +179,54 @@ textarea.in{resize:vertical;min-height:64px;line-height:1.4}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:var(--line);border-radius:99px;padding:5px 12px;font-size:.85rem}
 
+/* finanças */
+.fstrip{display:grid;grid-auto-flow:column;grid-auto-columns:58px;gap:4px;overflow-x:auto;margin:0 -16px;padding:0 16px 4px;scrollbar-width:none}
+.fstrip::-webkit-scrollbar{display:none}
+.fmo{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;border-radius:12px}
+.fmo[aria-pressed="true"]{background:var(--paper);box-shadow:0 0 0 1.5px var(--ink)}
+.fmo:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.fbar{height:84px;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.fbar i{width:55%;border-radius:5px 5px 2px 2px;background:var(--wash);border:1px solid var(--hair)}
+.fmo[aria-pressed="true"] .fbar i{background:var(--ink);border-color:var(--ink)}
+.flbl{font-weight:700;font-size:.78rem}
+.famt{font-size:.68rem;color:var(--soft);white-space:nowrap}
+.fsum{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fs{all:unset;box-sizing:border-box;display:grid;gap:2px;padding:12px 14px;background:var(--paper);border:1px solid var(--hair);border-radius:14px;min-width:0}
+button.fs{cursor:pointer;border-color:var(--ink)}
+button.fs:active{background:var(--hover)}
+.fs span{font-size:.78rem;color:var(--soft)}
+.fs b{font-family:var(--f-head);font-size:1.15rem;white-space:nowrap}
+.fs.left{grid-column:1/-1;background:var(--ink);color:var(--paper);border-color:var(--ink);box-shadow:var(--shadow)}
+.fs.left span{color:#ffffffb0}
+.fs.left b{font-size:1.6rem}
+.fs.left.neg b::before{content:"− "}
+.fhead{margin:0;font-size:.92rem}
+.dwrap{display:grid;grid-template-columns:150px 1fr;gap:16px;align-items:center}
+.dwrap svg{width:100%;height:auto}
+@media (max-width:400px){.dwrap{grid-template-columns:1fr;justify-items:center}.dwrap svg{max-width:180px}}
+.legend2{list-style:none;margin:0;padding:0;display:grid;gap:6px;width:100%}
+.legend2 li{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center;font-size:.88rem}
+.legend2 i{width:12px;height:12px;border-radius:4px;border:1px solid var(--hair)}
+.legend2 small{color:var(--muted)}
+.fblock{display:grid;gap:10px}
+.val{white-space:nowrap;font-weight:700}
+.fcat{border-bottom:1px solid var(--hair)}
+.fcat>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:6px 12px;padding:12px 0;min-height:44px}
+.fcat>summary::-webkit-details-marker{display:none}
+.fcat .cn{font-weight:600}
+.fcat .cn::before{content:"▸";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+.fcat[open] .cn::before{transform:rotate(90deg)}
+.fcat .track{grid-column:1/-1;height:5px;background:var(--wash);border-radius:99px;overflow:hidden}
+.fcat .track i{display:block;height:100%;background:var(--ink)}
+.fcat .list{padding-left:14px}
+.ftotal{display:flex;justify-content:space-between;padding-top:12px;border-top:1.5px solid var(--ink);font-weight:700}
+
 /* abas embaixo, como em app */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;justify-content:center;
   padding:6px max(8px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) max(8px,env(safe-area-inset-left));
   background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--hair)}
-.tabbar button{all:unset;box-sizing:border-box;flex:1;min-width:0;max-width:120px;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;
-  font-size:.7rem;font-weight:700;color:var(--muted);border-radius:14px}
+.tabbar button{all:unset;box-sizing:border-box;flex:1;min-width:0;max-width:110px;height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;
+  font-size:.64rem;font-weight:700;color:var(--muted);border-radius:14px}
 .tabbar .ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .tabbar button[aria-pressed="true"]{color:var(--ink)}
 .tabbar button[aria-pressed="true"] .ico{stroke-width:2.2}

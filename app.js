@@ -20,10 +20,14 @@ const uid = () => crypto.randomUUID();
    habits   lista de hábitos        [{ id, name }]
    checks   hábitos feitos por dia  { "2026-10-26": { habitId: 1 } }
    workouts treinos                 [{ id, date, type, min, note }]
-   events   eventos                 [{ id, date, time, title }] */
+   events   eventos                 [{ id, date, time, title }]
+   finance  planejador              { income: {mês: R$}, prepaid: {mês: R$}, ape: {mês: {parcela, evolucao}},
+                                      fixed: [{ id, name, value, start: mês, rec }],
+                                      card: [{ id, desc, cat, value, start: mês, n, N, rec }] }  (mês = "2026-11") */
 const norm = d => {
   d = d && typeof d === "object" ? d : {};
   d.items ||= []; d.days ||= {}; d.habits ||= []; d.checks ||= {}; d.workouts ||= []; d.events ||= [];
+  const F = d.finance ||= {}; F.income ||= {}; F.prepaid ||= {}; F.ape ||= {}; F.fixed ||= []; F.card ||= [];
   d.items.forEach(i => { if (i.kind === "podcast" || i.kind === "text") i.kind = "link"; }); // podcasts e textos viraram links
   return d;
 };
@@ -239,12 +243,104 @@ function renderList(kind) {
   }).join("") : '<p class="empty">Nada por aqui ainda.</p>';
 }
 
-function render() { renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); Object.keys(KINDS).forEach(renderList); }
+
+// ---------- finanças ----------
+// A fatura de cada mês sai das compras: a parcela n de N lançada no mês "start" avança uma por mês; assinatura (rec) repete sempre.
+const FCATS = ["Alimentação","Roupas e acessórios","Esporte","Lazer","Beleza","Assinaturas","Transporte","Viagem","Casa","Saúde","Eletrônicos","Livros e estudos","Outros"];
+const GREYS = ["#1c1b1d","#4b4a4f","#78777c","#a4a3a8","#c8c7cb","#e3e2e5"];
+const fin = () => data.finance;
+const mnum = k => { const [y, m] = k.split("-").map(Number); return y * 12 + m - 1; };
+const mkey = n => Math.floor(n / 12) + "-" + String(n % 12 + 1).padStart(2, "0");
+const mlabel = (k, long) => { const [y, m] = k.split("-"); return long ? MONL[m - 1] + " " + y : MONL[m - 1].slice(0, 3) + " " + y.slice(2); };
+const brl = v => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const brl0 = v => brl(v).replace(/,\d\d$/, "");
+const parseBRL = s => { s = String(s ?? "").trim().replace(/\s|R\$/g, ""); if (!s) return NaN; if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); return parseFloat(s); };
+const num = v => v == null ? "" : String(v).replace(".", ",");
+const sumv = a => a.reduce((s, x) => s + x.value, 0);
+function cardItems(k) {
+  const M = mnum(k), out = [];
+  for (const it of fin().card) {
+    const d = M - mnum(it.start); if (d < 0) continue;
+    if (it.rec) out.push({ ...it, label: "todo mês" });
+    else { const p = it.n + d; if (p <= it.N) out.push({ ...it, label: it.N > 1 ? "parcela " + p + "/" + it.N : "à vista" }); }
+  }
+  return out;
+}
+const fixedItems = k => fin().fixed.filter(f => f.rec ? mnum(k) >= mnum(f.start) : f.start === k);
+function incomeFor(k) { const ks = Object.keys(fin().income).filter(x => x <= k).sort(); return ks.length ? fin().income[ks[ks.length - 1]] : null; }
+const apeFor = k => (+fin().ape[k]?.parcela || 0) + (+fin().ape[k]?.evolucao || 0);
+const cardTotal = k => sumv(cardItems(k)) - (fin().prepaid[k] || 0);
+function finMonths() {
+  const cur = mnum(TODAY.slice(0, 7)), starts = [...fin().card, ...fin().fixed].map(x => mnum(x.start));
+  const first = Math.min(cur, ...starts), last = Math.max(cur, ...starts) + 11;
+  return Array.from({ length: last - first + 1 }, (_, i) => mkey(first + i));
+}
+let finSel = null;
+const finOpen = new Set(); // categorias abertas na fatura
+
+function renderFinance() {
+  const ms = finMonths(), cur = TODAY.slice(0, 7);
+  if (!ms.includes(finSel)) finSel = ms.find(k => k >= cur && cardItems(k).length) || cur;
+  const k = finSel, i = ms.indexOf(k);
+  const tots = ms.map(cardTotal), max = Math.max(...tots, 1);
+  $("fstrip").innerHTML = ms.map((m, j) => '<button type="button" class="fmo" data-fm="' + m + '" aria-pressed="' + (m === k) + '" aria-label="' + mlabel(m, 1) + ": " + brl(tots[j]) + ' no cartão"><span class="fbar"><i style="height:' + Math.max(3, tots[j] / max * 100) + '%"></i></span><span class="flbl">' + mlabel(m) + '</span><span class="famt">' + brl0(tots[j]) + "</span></button>").join("");
+  $("fmonth").textContent = mlabel(k, 1);
+  $("fprev").disabled = i <= 0; $("fnext").disabled = i >= ms.length - 1;
+
+  const inc = incomeFor(k), fx = sumv(fixedItems(k)), card = cardTotal(k), ap = apeFor(k);
+  const left = inc == null ? null : inc - fx - card - ap;
+  $("fsum").innerHTML =
+    '<button type="button" class="fs" data-edit="income:"><span>Renda ›</span><b>' + (inc == null ? "—" : brl(inc)) + "</b></button>" +
+    '<button type="button" class="fs" data-edit="ape:"><span>Apartamento ›</span><b>' + brl(ap) + "</b></button>" +
+    '<div class="fs"><span>Fora do cartão</span><b>' + brl(fx) + '</b></div><div class="fs"><span>Cartão</span><b>' + brl(card) + "</b></div>" +
+    '<div class="fs left' + (left < 0 ? " neg" : "") + '"><span>' + (left == null ? "Sobra (informe a renda)" : left < 0 ? "Falta" : "Sobra") + "</span><b>" + (left == null ? "—" : brl(Math.abs(left))) + "</b></div>";
+
+  // para onde foi: as 5 maiores fatias e o resto junto, em cinzas do mais escuro (maior) ao mais claro
+  const by = {}, add = (n, v) => { by[n] = (by[n] || 0) + v; };
+  cardItems(k).forEach(x => add(x.cat, x.value));
+  fixedItems(k).forEach(f => add(/yoga/i.test(f.name) ? "Esporte" : f.name, f.value)); // yoga conta como esporte
+  if (ap) add("Apartamento", ap);
+  let parts = Object.entries(by).map(([n, v]) => ({ n, v })).sort((a, b) => b.v - a.v);
+  if (parts.length > 6) parts = [...parts.slice(0, 5), { n: "Outros", v: parts.slice(5).reduce((s, p) => s + p.v, 0) }];
+  const g = parts.reduce((s, p) => s + p.v, 0);
+  if (!g) $("fdonut").innerHTML = '<p class="empty">Nada saiu neste mês ainda.</p>';
+  else {
+    const r = 72, C = 2 * Math.PI * r, gap = parts.length > 1 ? 2 : 0, pct = v => Math.round(v / g * 100) + "%";
+    let off = 0, segs = "";
+    parts.forEach((p, j) => { const len = p.v / g * C; segs += '<circle cx="100" cy="100" r="' + r + '" fill="none" stroke="' + GREYS[j] + '" stroke-width="28" stroke-dasharray="' + Math.max(len - gap, .5) + " " + C + '" stroke-dashoffset="' + -off + '"><title>' + esc(p.n) + ": " + brl(p.v) + "</title></circle>"; off += len; });
+    $("fdonut").innerHTML = '<p class="fhead">Onde mais saiu: <b>' + esc(parts[0].n) + "</b>, " + pct(parts[0].v) + " de tudo" + (inc ? " · saiu " + brl0(g) + " de " + brl0(inc) : "") + "</p>" +
+      '<div class="dwrap"><svg viewBox="0 0 200 200" role="img" aria-label="Gastos do mês por categoria"><g transform="rotate(-90 100 100)">' + segs + '</g><text x="100" y="94" text-anchor="middle" font-size="11" fill="#5b5a5e">saiu no mês</text><text x="100" y="116" text-anchor="middle" font-size="19" font-weight="700" fill="#1c1b1d">' + brl0(g) + "</text></svg>" +
+      '<ul class="legend2">' + parts.map((p, j) => '<li><i style="background:' + GREYS[j] + '"></i><span>' + esc(p.n) + " <small>" + pct(p.v) + "</small></span><b>" + brl(p.v) + "</b></li>").join("") + "</ul></div>";
+  }
+
+  const fi = fixedItems(k);
+  $("ffixed").innerHTML = (fi.length ? '<ul class="list">' + fi.map(f => lineBtn("fixed:" + f.id, '<span class="eb"><span class="et">' + esc(f.name) + '</span><span class="meta">' + (f.rec ? "todo mês desde " + mlabel(f.start) : "só neste mês") + '</span></span><b class="val">' + brl(f.value) + "</b>")).join("") + "</ul>" : '<p class="empty">Aluguel, contas, Pix, investimentos…</p>') +
+    '<button type="button" class="newbtn" data-new="fixed">+ gasto fora do cartão</button>';
+
+  $("ftitle").textContent = "Fatura de " + mlabel(k, 1);
+  const cats = {};
+  cardItems(k).forEach(x => (cats[x.cat] ||= []).push(x));
+  const order = Object.keys(cats).sort((a, b) => sumv(cats[b]) - sumv(cats[a])), cmax = order.length ? sumv(cats[order[0]]) : 1, pre = fin().prepaid[k] || 0;
+  $("fcard").innerHTML = (order.length ? order.map(c => '<details class="fcat" data-cat="' + esc(c) + '"' + (finOpen.has(c) ? " open" : "") + '><summary><span class="cn">' + esc(c) + "</span><b>" + brl(sumv(cats[c])) + '</b><span class="track"><i style="width:' + sumv(cats[c]) / cmax * 100 + '%"></i></span></summary><ul class="list">' +
+      cats[c].sort((a, b) => b.value - a.value).map(x => lineBtn("card:" + x.id, '<span class="eb"><span class="et">' + esc(x.desc) + '</span><span class="meta">' + x.label + '</span></span><b class="val">' + brl(x.value) + "</b>")).join("") + "</ul></details>").join("")
+      : '<p class="empty">Nenhuma compra neste mês.</p>') +
+    '<ul class="list">' + lineBtn("prepaid:", '<span class="et">Pagamento antecipado</span><b class="val">' + (pre ? "− " + brl(pre) : "—") + "</b>") + "</ul>" +
+    '<div class="ftotal"><span>Total da fatura</span><b>' + brl(card) + "</b></div>" +
+    '<button type="button" class="newbtn" data-new="card">+ nova compra</button>';
+}
+$("fstrip").onclick = e => { const b = e.target.closest("[data-fm]"); if (b) { finSel = b.dataset.fm; renderFinance(); } };
+$("fprev").onclick = () => { const ms = finMonths(); finSel = ms[ms.indexOf(finSel) - 1] || finSel; renderFinance(); };
+$("fnext").onclick = () => { const ms = finMonths(); finSel = ms[ms.indexOf(finSel) + 1] || finSel; renderFinance(); };
+$("fcard").addEventListener("toggle", e => { const d = e.target; if (d.dataset?.cat) d.open ? finOpen.add(d.dataset.cat) : finOpen.delete(d.dataset.cat); }, true);
+
+function render() { renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); Object.keys(KINDS).forEach(renderList); renderFinance(); }
 
 // ---------- folha de criar / editar ----------
 const ADD = { event: "Evento", workout: "Treino", "read-book": "Livro", "read-link": "Link" };
-const NAMES = { event: "evento", workout: "treino", habit: "hábito", book: "livro", link: "link", entry: "registro" };
+const NAMES = { event: "novo evento", workout: "novo treino", habit: "novo hábito", book: "novo livro", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
+const MONTHLY = { income: "renda", ape: "apartamento", prepaid: "pagamento antecipado" }; // valores de um mês só
 let sh = null; // { kind, obj, day, fromDay }
+const MONEY = 'type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"';
 const fld = (label, inner) => '<label class="fl"><span>' + label + "</span>" + inner + "</label>";
 const inp = (name, attrs, val) => '<input class="in" name="' + name + '" ' + (attrs || "") + ' value="' + esc(val ?? "") + '">';
 const txt = (name, val, ph) => '<textarea class="in" name="' + name + '" rows="2" placeholder="' + (ph || "") + '">' + esc(val || "") + "</textarea>";
@@ -276,11 +372,21 @@ function fields(kind, o, day) {
     case "link": return o
       ? fld("título", inp("title", 'required autocomplete="off"', o.title)) + fld("endereço", inp("url", 'type="url" required', o.url)) + fld("nota", txt("note", o.note, "opcional"))
       : fld("link", inp("url", 'type="url" required placeholder="cole o link do podcast, artigo, vídeo…"')) + '<label class="chk"><input type="checkbox" name="today" checked> consumi hoje</label>';
+    case "income": return fld("renda (R$)", inp("value", 'type="text" inputmode="decimal" autocomplete="off" placeholder="vazio: vale a do mês anterior"', num(fin().income[finSel]))) +
+      '<p class="empty">O valor vale para os meses seguintes até você mudar.</p>';
+    case "prepaid": return fld("pago antes do fechamento (R$)", inp("value", MONEY, num(fin().prepaid[finSel])));
+    case "ape": return pair(fld("parcela (R$)", inp("parcela", MONEY, num(fin().ape[finSel]?.parcela))), fld("evolução de obra (R$)", inp("evolucao", MONEY, num(fin().ape[finSel]?.evolucao))));
+    case "fixed": return fld("o quê", inp("name", 'required autocomplete="off" placeholder="ex: aluguel"', o?.name)) + fld("valor (R$)", inp("value", MONEY + " required", num(o?.value))) +
+      '<label class="chk"><input type="checkbox" name="rec"' + (!o || o.rec ? " checked" : "") + "> todo mês a partir de " + mlabel(o?.start || finSel) + "</label>";
+    case "card": return fld("compra", inp("desc", 'required autocomplete="off"', o?.desc)) +
+      pair(fld("valor da parcela (R$)", inp("value", MONEY + " required", num(o?.value))), fld("categoria", '<select class="in" name="cat">' + FCATS.map(c => "<option" + (c === (o?.cat || "Outros") ? " selected" : "") + ">" + c + "</option>").join("") + "</select>")) +
+      pair(fld("parcela em " + mlabel(o?.start || finSel), inp("n", 'type="number" min="1" inputmode="numeric"', o?.n || 1)), fld("total de parcelas", inp("N", 'type="number" min="1" inputmode="numeric"', o?.N || 1))) +
+      '<label class="chk"><input type="checkbox" name="rec"' + (o?.rec ? " checked" : "") + "> assinatura (repete todo mês)</label>";
   }
 }
 function drawSheet() {
   const { kind, obj, day, fromDay } = sh;
-  $("shtitle").textContent = fromDay ? "registrar · " + fmt(day) : (obj ? "editar " : "novo ") + NAMES[kind];
+  $("shtitle").textContent = fromDay ? "registrar · " + fmt(day) : MONTHLY[kind] ? MONTHLY[kind] + " · " + mlabel(finSel) : obj ? "editar" : NAMES[kind];
   $("shseg").hidden = !fromDay;
   $("shseg").innerHTML = Object.entries(ADD).map(([k, v]) => '<button type="button" data-sk="' + k + '" aria-pressed="' + (k === kind) + '">' + v + "</button>").join("");
   $("shfields").innerHTML = fields(kind, obj, day);
@@ -350,6 +456,23 @@ $("shform").onsubmit = async e => {
     }
     Object.assign(o, { title, author, pages, image, isbn, note: v("note") });
     if (!obj) data.items.push(o);
+  } else if (MONTHLY[kind]) {
+    const F = fin();
+    if (kind === "ape") {
+      const p = parseBRL(v("parcela")), ev = parseBRL(v("evolucao"));
+      if (isNaN(p) && isNaN(ev)) delete F.ape[finSel]; else F.ape[finSel] = { parcela: isNaN(p) ? null : p, evolucao: isNaN(ev) ? null : ev };
+    } else {
+      const x = parseBRL(v("value")), map = kind === "income" ? F.income : F.prepaid;
+      if (isNaN(x)) delete map[finSel]; else map[finSel] = x;
+    }
+  } else if (kind === "fixed" || kind === "card") {
+    const x = parseBRL(v("value"));
+    if (isNaN(x)) return f.value.focus();
+    if (kind === "fixed") upsert(fin().fixed, obj, { name: v("name"), value: x, rec: f.rec.checked, start: obj?.start || finSel });
+    else {
+      const N = Math.max(1, parseInt(v("N")) || 1), n = Math.min(N, Math.max(1, parseInt(v("n")) || 1));
+      upsert(fin().card, obj, { desc: v("desc"), cat: v("cat"), value: x, n, N, rec: f.rec.checked, start: obj?.start || finSel });
+    }
   } else if (kind === "link") {
     if (obj) Object.assign(obj, { title: v("title"), url: v("url"), note: v("note") });
     else {
@@ -365,7 +488,11 @@ $("shdel").onclick = () => {
   if (kind === "entry") { data.days[day] = data.days[day].filter(x => x !== obj); if (!data.days[day].length) delete data.days[day]; }
   else if (kind === "event") data.events = data.events.filter(x => x !== obj);
   else if (kind === "workout") data.workouts = data.workouts.filter(x => x !== obj);
-  else if (kind === "habit") {
+  else if (kind === "fixed") data.finance.fixed = fin().fixed.filter(x => x !== obj);
+  else if (kind === "card") {
+    if (!confirm("Remover \"" + obj.desc + "\" de todos os meses?")) return;
+    data.finance.card = fin().card.filter(x => x !== obj);
+  } else if (kind === "habit") {
     if (!confirm("Apagar este hábito e o histórico dele?")) return;
     data.habits = data.habits.filter(x => x !== obj);
     for (const k in data.checks) { delete data.checks[k][obj.id]; if (!Object.keys(data.checks[k]).length) delete data.checks[k]; }
@@ -404,6 +531,8 @@ document.addEventListener("click", e => {
     if (what === "event") return openSheet("event", data.events.find(x => x.id === id));
     if (what === "workout") return openSheet("workout", data.workouts.find(x => x.id === id));
     if (what === "habit") return openSheet("habit", data.habits.find(x => x.id === id));
+    if (MONTHLY[what]) return openSheet(what);
+    if (what === "fixed" || what === "card") return openSheet(what, fin()[what].find(x => x.id === id));
     if (what === "entry") return openSheet("entry", (data.days[sel] || []).find(x => x.id === id), sel);
     const it = itemOf(id); if (it) return openSheet(it.kind, it);
     return;
