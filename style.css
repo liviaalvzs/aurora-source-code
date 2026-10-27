@@ -219,6 +219,14 @@ button.fs:active{background:var(--hover)}
 .fcat .track{grid-column:1/-1;height:5px;background:var(--wash);border-radius:99px;overflow:hidden}
 .fcat .track i{display:block;height:100%;background:var(--ink)}
 .fcat .list{padding-left:14px}
+.catgrid{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.catgrid legend{font-size:.78rem;font-weight:600;color:var(--soft);padding:0 0 4px}
+.catgrid label{display:grid;justify-items:center;gap:2px;padding:8px 2px;border:1px solid var(--hair);border-radius:12px;cursor:pointer;text-align:center;min-width:0}
+.catgrid input{position:absolute;opacity:0;pointer-events:none}
+.catgrid span{font-size:1.4rem;line-height:1}
+.catgrid small{font-size:.62rem;line-height:1.15;color:var(--soft)}
+.catgrid label:has(input:checked){border:1.5px solid var(--ink);background:var(--wash)}
+.catgrid label:has(input:focus-visible){outline:2px solid var(--ink);outline-offset:2px}
 .ftotal{display:flex;justify-content:space-between;padding-top:12px;border-top:1.5px solid var(--ink);font-weight:700}
 
 /* abas embaixo, como em app */

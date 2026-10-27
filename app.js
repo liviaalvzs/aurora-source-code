@@ -246,7 +246,13 @@ function renderList(kind) {
 
 // ---------- finanças ----------
 // A fatura de cada mês sai das compras: a parcela n de N lançada no mês "start" avança uma por mês; assinatura (rec) repete sempre.
-const FCATS = ["Alimentação","Roupas e acessórios","Esporte","Lazer","Beleza","Assinaturas","Transporte","Viagem","Casa","Saúde","Eletrônicos","Livros e estudos","Outros"];
+// categorias da fatura, cada uma com um emoji para bater o olho; a escolha é por toque na folha de edição
+const FCATS = [["Restaurantes","🍝"],["Café e padaria","☕"],["Mercado","🛒"],["Delivery","🛵"],["Alimentação","🍽️"],["Bares e saídas","🍻"],
+  ["Transporte","🚕"],["Transporte público","🚇"],["Eventos e ingressos","🎟️"],["Lazer","🎬"],["Esporte","🏃‍♀️"],["Roupas e acessórios","👗"],
+  ["Beleza","💄"],["Saúde","💊"],["Livros e estudos","📚"],["Eletrônicos","🎧"],["Viagem","✈️"],["Casa","🏠"],["Assinaturas","🔁"],
+  ["Presentes","🎁"],["Pets","🐶"],["Trabalho","💼"],["Outros","📦"]];
+const CATEMO = Object.fromEntries([...FCATS, ["Apartamento","🏢"]]);
+const catLabel = c => (CATEMO[c] || "📌") + " " + c; // gastos fora do cartão aparecem pelo nome, com 📌
 const GREYS = ["#1c1b1d","#4b4a4f","#78777c","#a4a3a8","#c8c7cb","#e3e2e5"];
 const fin = () => data.finance;
 const mnum = k => { const [y, m] = k.split("-").map(Number); return y * 12 + m - 1; };
@@ -308,9 +314,9 @@ function renderFinance() {
     const r = 72, C = 2 * Math.PI * r, gap = parts.length > 1 ? 2 : 0, pct = v => Math.round(v / g * 100) + "%";
     let off = 0, segs = "";
     parts.forEach((p, j) => { const len = p.v / g * C; segs += '<circle cx="100" cy="100" r="' + r + '" fill="none" stroke="' + GREYS[j] + '" stroke-width="28" stroke-dasharray="' + Math.max(len - gap, .5) + " " + C + '" stroke-dashoffset="' + -off + '"><title>' + esc(p.n) + ": " + brl(p.v) + "</title></circle>"; off += len; });
-    $("fdonut").innerHTML = '<p class="fhead">Onde mais saiu: <b>' + esc(parts[0].n) + "</b>, " + pct(parts[0].v) + " de tudo" + (inc ? " · saiu " + brl0(g) + " de " + brl0(inc) : "") + "</p>" +
+    $("fdonut").innerHTML = '<p class="fhead">Onde mais saiu: <b>' + esc(catLabel(parts[0].n)) + "</b>, " + pct(parts[0].v) + " de tudo" + (inc ? " · saiu " + brl0(g) + " de " + brl0(inc) : "") + "</p>" +
       '<div class="dwrap"><svg viewBox="0 0 200 200" role="img" aria-label="Gastos do mês por categoria"><g transform="rotate(-90 100 100)">' + segs + '</g><text x="100" y="94" text-anchor="middle" font-size="11" fill="#5b5a5e">saiu no mês</text><text x="100" y="116" text-anchor="middle" font-size="19" font-weight="700" fill="#1c1b1d">' + brl0(g) + "</text></svg>" +
-      '<ul class="legend2">' + parts.map((p, j) => '<li><i style="background:' + GREYS[j] + '"></i><span>' + esc(p.n) + " <small>" + pct(p.v) + "</small></span><b>" + brl(p.v) + "</b></li>").join("") + "</ul></div>";
+      '<ul class="legend2">' + parts.map((p, j) => '<li><i style="background:' + GREYS[j] + '"></i><span>' + esc(catLabel(p.n)) + " <small>" + pct(p.v) + "</small></span><b>" + brl(p.v) + "</b></li>").join("") + "</ul></div>";
   }
 
   const fi = fixedItems(k);
@@ -321,7 +327,7 @@ function renderFinance() {
   const cats = {};
   cardItems(k).forEach(x => (cats[x.cat] ||= []).push(x));
   const order = Object.keys(cats).sort((a, b) => sumv(cats[b]) - sumv(cats[a])), cmax = order.length ? sumv(cats[order[0]]) : 1, pre = fin().prepaid[k] || 0;
-  $("fcard").innerHTML = (order.length ? order.map(c => '<details class="fcat" data-cat="' + esc(c) + '"' + (finOpen.has(c) ? " open" : "") + '><summary><span class="cn">' + esc(c) + "</span><b>" + brl(sumv(cats[c])) + '</b><span class="track"><i style="width:' + sumv(cats[c]) / cmax * 100 + '%"></i></span></summary><ul class="list">' +
+  $("fcard").innerHTML = (order.length ? order.map(c => '<details class="fcat" data-cat="' + esc(c) + '"' + (finOpen.has(c) ? " open" : "") + '><summary><span class="cn">' + esc(catLabel(c)) + "</span><b>" + brl(sumv(cats[c])) + '</b><span class="track"><i style="width:' + sumv(cats[c]) / cmax * 100 + '%"></i></span></summary><ul class="list">' +
       cats[c].sort((a, b) => b.value - a.value).map(x => lineBtn("card:" + x.id, '<span class="eb"><span class="et">' + esc(x.desc) + '</span><span class="meta">' + x.label + '</span></span><b class="val">' + brl(x.value) + "</b>")).join("") + "</ul></details>").join("")
       : '<p class="empty">Nenhuma compra neste mês.</p>') +
     '<ul class="list">' + lineBtn("prepaid:", '<span class="et">Pagamento antecipado</span><b class="val">' + (pre ? "− " + brl(pre) : "—") + "</b>") + "</ul>" +
@@ -379,7 +385,8 @@ function fields(kind, o, day) {
     case "fixed": return fld("o quê", inp("name", 'required autocomplete="off" placeholder="ex: aluguel"', o?.name)) + fld("valor (R$)", inp("value", MONEY + " required", num(o?.value))) +
       '<label class="chk"><input type="checkbox" name="rec"' + (!o || o.rec ? " checked" : "") + "> todo mês a partir de " + mlabel(o?.start || finSel) + "</label>";
     case "card": return fld("compra", inp("desc", 'required autocomplete="off"', o?.desc)) +
-      pair(fld("valor da parcela (R$)", inp("value", MONEY + " required", num(o?.value))), fld("categoria", '<select class="in" name="cat">' + FCATS.map(c => "<option" + (c === (o?.cat || "Outros") ? " selected" : "") + ">" + c + "</option>").join("") + "</select>")) +
+      fld("valor da parcela (R$)", inp("value", MONEY + " required", num(o?.value))) +
+      '<fieldset class="catgrid"><legend>categoria</legend>' + FCATS.map(([c, e]) => '<label><input type="radio" name="cat" value="' + c + '"' + (c === (o?.cat || "Outros") ? " checked" : "") + "><span>" + e + "</span><small>" + c + "</small></label>").join("") + "</fieldset>" +
       pair(fld("parcela em " + mlabel(o?.start || finSel), inp("n", 'type="number" min="1" inputmode="numeric"', o?.n || 1)), fld("total de parcelas", inp("N", 'type="number" min="1" inputmode="numeric"', o?.N || 1))) +
       '<label class="chk"><input type="checkbox" name="rec"' + (o?.rec ? " checked" : "") + "> assinatura (repete todo mês)</label>";
   }
