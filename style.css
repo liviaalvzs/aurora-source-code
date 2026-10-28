@@ -160,6 +160,11 @@ textarea.in{resize:vertical;min-height:64px;line-height:1.4}
 .seg.four button{font-size:.82rem}
 
 /* hábitos */
+.cups{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+.cup{height:40px;padding:0;border:0;background:none;cursor:pointer}
+.cup svg{width:100%;height:100%;fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-linejoin:round}
+.cup.on svg{fill:var(--ink)}
+.cup:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:6px}
 .hlist{display:grid}
 .hrow{display:flex;align-items:center;gap:12px;min-height:44px;cursor:pointer;flex:1;min-width:0}
 .hrow span{overflow-wrap:anywhere}

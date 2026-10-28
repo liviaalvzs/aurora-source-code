@@ -21,12 +21,13 @@ const uid = () => crypto.randomUUID();
    checks   hábitos feitos por dia  { "2026-10-26": { habitId: 1 } }
    workouts treinos                 [{ id, date, type, min, note }]
    events   eventos                 [{ id, date, time, title }]
+   water    copos de 200 ml por dia { "2026-10-26": 6 }
    finance  planejador              { income: {mês: R$}, prepaid: {mês: R$}, ape: {mês: {parcela, evolucao}},
                                       fixed: [{ id, name, value, start: mês, rec }],
                                       card: [{ id, desc, cat, value, start: mês, n, N, rec }] }  (mês = "2026-11") */
 const norm = d => {
   d = d && typeof d === "object" ? d : {};
-  d.items ||= []; d.days ||= {}; d.habits ||= []; d.checks ||= {}; d.workouts ||= []; d.events ||= [];
+  d.items ||= []; d.days ||= {}; d.habits ||= []; d.checks ||= {}; d.workouts ||= []; d.events ||= []; d.water ||= {};
   const F = d.finance ||= {}; F.income ||= {}; F.prepaid ||= {}; F.ape ||= {}; F.fixed ||= []; F.card ||= [];
   d.items.forEach(i => { if (i.kind === "podcast" || i.kind === "text") i.kind = "link"; }); // podcasts e textos viraram links
   return d;
@@ -150,6 +151,17 @@ document.addEventListener("error", e => {
 }, true);
 const note = t => t ? '<span class="note">' + esc(t) + "</span>" : "";
 const habitCheck = (h, k) => '<label class="hrow"><input type="checkbox" data-hk="' + h.id + '" data-day="' + k + '"' + (done(k, h.id) ? " checked" : "") + '><span>' + esc(h.name) + '</span></label>';
+// água: copos de 200 ml, meta de 2 L; passou da meta, sempre aparece mais um copo vazio
+const GOAL = 10;
+const litros = n => (n * 0.2).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " L";
+function waterBlock(k) {
+  const n = data.water[k] || 0;
+  let cups = "";
+  for (let i = 1; i <= (n >= GOAL ? n + 1 : GOAL); i++)
+    cups += '<button type="button" class="cup' + (i <= n ? " on" : "") + '" data-cup="' + k + ":" + i + '" aria-label="' + i + (i > 1 ? " copos" : " copo") + '" aria-pressed="' + (i <= n) + '">' +
+      '<svg viewBox="0 0 24 30" aria-hidden="true"><path d="M3 3h18l-2.6 24H5.6z"/></svg></button>';
+  return block("Água · " + litros(n) + " de " + litros(GOAL), '<div class="cups">' + cups + "</div>");
+}
 // cada linha é um botão: tocar abre a edição
 const lineBtn = (edit, inner) => '<li><button type="button" class="line" data-edit="' + edit + '">' + inner + '<span class="chev" aria-hidden="true">›</span></button></li>';
 const workoutLine = w => lineBtn("workout:" + w.id, '<span class="eb"><span class="et">' + esc(w.type) + (w.min ? " · " + w.min + " min" : "") + "</span>" + note(w.note) + "</span>");
@@ -182,24 +194,24 @@ const block = (title, body) => '<div class="block"><span class="flabel">' + titl
 function renderDay() {
   const d = toDate(sel), es = data.days[sel] || [], evs = eventsOn(sel), wos = workoutsOn(sel);
   let h = '<div class="sech"><h3>' + d.getDate() + " de " + MONL[d.getMonth()] + '</h3><span class="label">' + DOWL[d.getDay()] + (sel === TODAY ? " · hoje" : "") + "</span></div>";
-  // só aparecem os blocos que têm algo; os hábitos sempre, para marcar
+  // só aparecem os blocos que têm algo; água e hábitos sempre, para marcar
   if (evs.length) h += block("Eventos", '<ul class="list">' + evs.map(e => eventLine(e)).join("") + "</ul>");
+  h += waterBlock(sel);
   if (data.habits.length) h += block("Hábitos", '<div class="hlist">' + data.habits.map(x => habitCheck(x, sel)).join("") + "</div>");
   if (wos.length) h += block("Treinos", '<ul class="list">' + wos.map(workoutLine).join("") + "</ul>");
   if (es.length) h += block("Conteúdo", '<ul class="list">' + es.map(entryLine).join("") + "</ul>");
-  if (!evs.length && !wos.length && !es.length && !data.habits.length) h += '<p class="empty">Nada registrado neste dia.</p>';
   $("day").innerHTML = h + '<button type="button" class="newbtn solid" data-new="day">+ registrar</button>';
 }
 
 function renderHabits() {
-  $("habits").innerHTML = data.habits.length ? '<div class="sech"><h3>Hoje</h3><span class="label">' + data.habits.filter(x => done(TODAY, x.id)).length + " / " + data.habits.length + "</span></div>" +
+  $("habits").innerHTML = waterBlock(TODAY) + (data.habits.length ? '<div class="sech"><h3>Hoje</h3><span class="label">' + data.habits.filter(x => done(TODAY, x.id)).length + " / " + data.habits.length + "</span></div>" +
     data.habits.map(x => {
       const s = streak(x.id);
       let dots = "";
       for (let i = 13; i >= 0; i--) { const k = addDays(TODAY, -i); dots += '<i class="' + (done(k, x.id) ? "on" : "") + '" title="' + fmt(k) + '"></i>'; }
       return '<div class="habit">' + habitCheck(x, TODAY) + '<button type="button" class="del" data-edit="habit:' + x.id + '" aria-label="Editar hábito ' + esc(x.name) + '">✎</button>' +
         '<div class="hmeta"><span class="dots14">' + dots + '</span><span class="meta">' + (s ? s + (s > 1 ? " dias seguidos" : " dia") : "") + "</span></div></div>";
-    }).join("") : '<p class="empty">Nenhum hábito ainda. Crie o primeiro acima.</p>';
+    }).join("") : '<p class="empty">Nenhum hábito ainda. Crie o primeiro acima.</p>');
 }
 
 function renderWorkouts() {
@@ -543,6 +555,12 @@ document.addEventListener("click", e => {
     if (what === "entry") return openSheet("entry", (data.days[sel] || []).find(x => x.id === id), sel);
     const it = itemOf(id); if (it) return openSheet(it.kind, it);
     return;
+  }
+  const c = e.target.closest("[data-cup]");
+  if (c) { // tocar no último copo cheio esvazia ele
+    const [k, i] = c.dataset.cup.split(":"), v = +i === (data.water[k] || 0) ? +i - 1 : +i;
+    if (v) data.water[k] = v; else delete data.water[k];
+    return save();
   }
   const d = e.target.closest("[data-done]");
   if (d) { const it = itemOf(d.dataset.done); if (it) { it.done = !it.done; save(); } }
