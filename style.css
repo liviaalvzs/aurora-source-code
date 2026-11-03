@@ -245,6 +245,19 @@ button.fs:active{background:var(--hover)}
 .catgrid label:has(input:focus-visible){outline:2px solid var(--ink);outline-offset:2px}
 .ftotal{display:flex;justify-content:space-between;padding-top:12px;border-top:1.5px solid var(--ink);font-weight:700}
 
+/* hoje */
+.todayhead{display:grid;gap:8px;padding:22px 20px;border-radius:28px;color:#fff}
+.todayhead h2{font-size:2.3rem;text-shadow:0 1px 8px #2a4a7a55}
+.todayhead .label{color:#ffffffd9}
+.todayhead .chip{background:#ffffffd9;color:var(--ink);font-weight:600}
+.line.static{cursor:default}
+.line.static:active{background:none}
+.when small{display:block;font-weight:500;color:var(--muted);font-size:.75rem}
+.task{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--hair)}
+.task .meta{white-space:nowrap}
+.taskadd{display:flex;gap:8px;margin-top:4px}
+.taskadd .nbtn{height:52px;min-width:52px;background:var(--ink);color:#fff;font-size:1.4rem}
+
 /* abas embaixo, como em app */
 .tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 10px);z-index:10;display:flex;gap:2px;padding:5px;border-radius:99px;
   background:var(--ink);box-shadow:0 10px 30px #0000003d;width:calc(100% - 20px);max-width:460px;box-sizing:border-box}

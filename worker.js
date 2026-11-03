@@ -22,10 +22,25 @@ async function book(q, key) {
   } catch { return json({}); }
 }
 
+// Calendário assinado (.ics) do Outlook ou do iCloud. O link vem no corpo (POST) porque é secreto: quem tem o link vê a agenda.
+// Só esses dois serviços, para o Worker não virar um proxy aberto.
+const ICS_HOSTS = /(^|\.)(outlook\.office365\.com|outlook\.live\.com|icloud\.com)$/;
+async function ics(req) {
+  let target;
+  try { target = new URL(((await req.json()).url || "").trim().replace(/^webcals?:/, "https:")); } catch { return json({ error: "link inválido" }, 400); }
+  if (target.protocol !== "https:" || !ICS_HOSTS.test(target.hostname)) return json({ error: "use o link .ics do Outlook ou do iCloud" }, 400);
+  try {
+    const r = await fetch(target, { redirect: "follow", signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return json({ error: "o calendário respondeu " + r.status }, 502);
+    return new Response(await r.text(), { headers: { "content-type": "text/calendar; charset=utf-8", "cache-control": "no-store" } });
+  } catch { return json({ error: "não abriu o calendário" }, 502); }
+}
+
 export default {
   async fetch(req, env) {
     const u = new URL(req.url);
     if (u.pathname === "/api/book") return book(u.searchParams.get("q") || "", env.GOOGLE_BOOKS_KEY);
+    if (u.pathname === "/api/ics" && req.method === "POST") return ics(req);
     if (u.pathname !== "/api/preview") return env.ASSETS.fetch(req);
 
     let target;

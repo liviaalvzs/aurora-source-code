@@ -36,7 +36,11 @@
 </form>
 
 <div class="wrap">
-  <section class="tab" id="tab-cal">
+  <section class="tab" id="tab-today">
+    <div class="tab" id="today"></div>
+  </section>
+
+  <section class="tab" id="tab-cal" hidden>
     <div class="monthhead sky">
       <button type="button" class="nbtn" id="mprev" aria-label="Mês anterior">←</button>
       <h2 id="month"></h2>
@@ -97,7 +101,8 @@
 </div>
 
 <nav class="tabbar" id="tabbar">
-  <button type="button" data-tab="tab-cal" aria-pressed="true"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Dias</button>
+  <button type="button" data-tab="tab-today" aria-pressed="true"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>Hoje</button>
+  <button type="button" data-tab="tab-cal" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Dias</button>
   <button type="button" data-tab="tab-hab" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8.2 12.3l2.6 2.6 5-5.4"/></svg>Hábitos</button>
   <button type="button" data-tab="tab-wo" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6H21"/></svg>Treinos</button>
   <button type="button" data-tab="tab-ev" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4h11l-2.5 4L17 12H6"/></svg>Eventos</button>

@@ -23,12 +23,14 @@ const uid = () => crypto.randomUUID();
    workouts treinos                 [{ id, date, type, min, note }]
    events   eventos                 [{ id, date, time, title }]
    water    copos de 200 ml por dia { "2026-10-26": 6 }
+   tasks    tarefas                 [{ id, date, title, done }]
+   cals     calendários assinados   [{ id, name, url }]  (link .ics secreto: fica só na conta, nunca no código)
    finance  planejador              { income: {mês: R$}, prepaid: {mês: R$}, ape: {mês: {parcela, evolucao}},
                                       fixed: [{ id, name, value, start: mês, rec }],
                                       card: [{ id, desc, cat, value, start: mês, n, N, rec }] }  (mês = "2026-11") */
 const norm = d => {
   d = d && typeof d === "object" ? d : {};
-  d.items ||= []; d.days ||= {}; d.habits ||= []; d.checks ||= {}; d.workouts ||= []; d.events ||= []; d.water ||= {};
+  d.items ||= []; d.days ||= {}; d.habits ||= []; d.checks ||= {}; d.workouts ||= []; d.events ||= []; d.water ||= {}; d.tasks ||= []; d.cals ||= [];
   const F = d.finance ||= {}; F.income ||= {}; F.prepaid ||= {}; F.ape ||= {}; F.fixed ||= []; F.card ||= [];
   d.items.forEach(i => { if (i.kind === "podcast" || i.kind === "text") i.kind = "link"; }); // podcasts e textos viraram links
   return d;
@@ -67,6 +69,7 @@ async function pull() {
   data = norm(row.data);
   ls(KEY, JSON.stringify(data));
   status(""); render();
+  if (data.cals.length && Date.now() - icsAt > 6e5) loadCals();
 }
 addEventListener("online", () => { if (user) pull(); });
 addEventListener("offline", () => status("sem internet · salvo no aparelho"));
@@ -136,6 +139,116 @@ function newLink(p) {
   const it = { id: uid(), kind: "link", url: p.url, title: p.title, image: p.image, site: p.site, desc: p.desc, created: TODAY };
   data.items.push(it);
   return it;
+}
+
+// ---------- calendários importados (.ics do Outlook e do iCloud) ----------
+// ponytail: horário com TZID é lido como hora local (serve para quem está no fuso dos calendários); só "Z" (UTC) é convertido
+const icsUnesc = s => s.replace(/\\n/gi, " ").replace(/\\([,;\\])/g, "$1");
+function icsDate(v, params) {
+  const m = v.match(/^(\d{4})(\d\d)(\d\d)(?:T(\d\d)(\d\d)(\d\d)?(Z)?)?/); if (!m) return null;
+  const allDay = /VALUE=DATE(?!-)/.test(params) || !m[4];
+  const d = m[7] ? new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5])) : new Date(+m[1], m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0));
+  return { d, allDay };
+}
+function parseICS(text, cal) {
+  const lines = text.replace(/\r?\n[ \t]/g, "").split(/\r?\n/), out = [];
+  let ev = null;
+  for (const line of lines) {
+    if (line === "BEGIN:VEVENT") { ev = { cal, ex: new Set() }; continue; }
+    if (line === "END:VEVENT") { if (ev?.start && ev.status !== "CANCELLED") out.push(ev); ev = null; continue; }
+    if (!ev) continue;
+    const i = line.indexOf(":"); if (i < 0) continue;
+    const [name, ...ps] = line.slice(0, i).split(";"), params = ps.join(";"), val = line.slice(i + 1);
+    if (name === "SUMMARY") ev.title = icsUnesc(val);
+    else if (name === "LOCATION") ev.where = icsUnesc(val);
+    else if (name === "UID") ev.uid = val;
+    else if (name === "STATUS") ev.status = val;
+    else if (name === "DTSTART") { const t = icsDate(val, params); if (t) { ev.start = t.d; ev.allDay = t.allDay; } }
+    else if (name === "DTEND") ev.end = icsDate(val, params)?.d;
+    else if (name === "RRULE") ev.rule = Object.fromEntries(val.split(";").map(p => p.split("=")));
+    else if (name === "EXDATE") val.split(",").forEach(x => { const t = icsDate(x, params); if (t) ev.ex.add(iso(t.d)); });
+    else if (name === "RECURRENCE-ID") ev.rid = iso(icsDate(val, params)?.d || new Date(0));
+  }
+  return out;
+}
+const WD = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+// a regra de repetição (RRULE) vale para o dia k? cobre DAILY/WEEKLY/MONTHLY/YEARLY com INTERVAL, BYDAY, UNTIL e COUNT
+function ruleHits(ev, k) {
+  const r = ev.rule, s = iso(ev.start), n = +(r.INTERVAL || 1), d = toDate(k), d0 = toDate(s);
+  if (k < s || (r.UNTIL && k > iso(icsDate(r.UNTIL, "").d))) return false;
+  const days = Math.round((d - d0) / 864e5), byday = r.BYDAY ? r.BYDAY.split(",") : null;
+  const nth = code => { // "2TU" = segunda terça do mês; "-1FR" = última sexta
+    const m = code.match(/^([+-]?\d+)?(\w\w)$/); if (!m || WD[d.getDay()] !== m[2]) return false;
+    if (!m[1]) return true;
+    const i = +m[1], last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return i > 0 ? Math.ceil(d.getDate() / 7) === i : Math.floor((last - d.getDate()) / 7) === -i - 1;
+  };
+  let hit;
+  if (r.FREQ === "DAILY") hit = days % n === 0;
+  else if (r.FREQ === "WEEKLY") {
+    const wk = Math.floor((days + (d0.getDay() + 6) % 7) / 7); // semanas começam na segunda
+    hit = wk % n === 0 && (byday ? byday.includes(WD[d.getDay()]) : d.getDay() === d0.getDay());
+  } else if (r.FREQ === "MONTHLY") {
+    const months = (d.getFullYear() - d0.getFullYear()) * 12 + d.getMonth() - d0.getMonth();
+    hit = months % n === 0 && (byday ? byday.some(nth) : d.getDate() === +(r.BYMONTHDAY || d0.getDate()));
+  } else if (r.FREQ === "YEARLY") hit = (d.getFullYear() - d0.getFullYear()) % n === 0 && d.getMonth() === d0.getMonth() && d.getDate() === d0.getDate();
+  if (!hit || !r.COUNT) return !!hit;
+  let c = 0; // ponytail: conta as ocorrências dia a dia até k; lento só para regras com COUNT muito antigas
+  for (let x = s; x <= k; x = addDays(x, 1)) if (x === k || ruleHits({ ...ev, rule: { ...r, COUNT: "" } }, x)) c++;
+  return c <= +r.COUNT;
+}
+let icsEvents = [], icsAt = 0, icsErr = {};
+async function loadCals() {
+  icsAt = Date.now();
+  const res = await Promise.all(data.cals.map(async c => {
+    try {
+      const r = await fetch("/api/ics", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: c.url }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "erro " + r.status);
+      delete icsErr[c.id];
+      return parseICS(await r.text(), c);
+    } catch (e) { icsErr[c.id] = e.message; return []; }
+  }));
+  icsEvents = res.flat();
+  renderToday();
+}
+function calEventsOn(k) {
+  const moved = new Set(icsEvents.filter(e => e.rid).map(e => e.uid + e.rid)); // ocorrência alterada substitui a da regra
+  return icsEvents.filter(e => {
+    if (e.rid) return iso(e.start) === k;
+    if (e.rule) return !e.ex.has(k) && !moved.has(e.uid + k) && ruleHits(e, k);
+    const s = iso(e.start), end = e.end ? iso(new Date(e.end - (e.allDay ? 864e5 : 1))) : s; // fim do dia inteiro é exclusivo
+    return k >= s && k <= end;
+  }).map(e => {
+    const hm = d => String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    const dur = e.end ? e.end - e.start : 0;
+    return { cal: e.cal.name, title: e.title || "(sem título)", where: e.where, time: e.allDay ? "" : hm(e.start), until: e.allDay || !dur ? "" : hm(new Date(e.start.getTime() + dur)) };
+  });
+}
+
+// ---------- hoje: agenda, tarefas, hábitos e água numa tela ----------
+const taskLine = t => '<div class="task' + (t.done ? " on" : "") + '"><label class="hrow"><input type="checkbox" data-task="' + t.id + '"' + (t.done ? " checked" : "") + "><span>" + esc(t.title) + "</span></label>" +
+  (t.date < TODAY ? '<span class="meta">' + fmt(t.date) + "</span>" : "") + '<button type="button" class="del" data-edit="task:' + t.id + '" aria-label="Editar tarefa">✎</button></div>';
+function renderToday() {
+  const d = toDate(TODAY);
+  const agenda = [...eventsOn(TODAY).map(e => ({ title: e.title, time: e.time, edit: e.id })), ...calEventsOn(TODAY)]
+    .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const late = data.tasks.filter(t => !t.done && t.date < TODAY && t.date >= START).sort((a, b) => a.date.localeCompare(b.date));
+  const mine = data.tasks.filter(t => t.date === TODAY), open = [...late, ...mine.filter(t => !t.done)].length;
+  const errs = data.cals.filter(c => icsErr[c.id]).map(c => '<p class="empty">⚠️ ' + esc(c.name) + ": " + esc(icsErr[c.id]) + "</p>").join("");
+  $("today").innerHTML =
+    '<div class="todayhead sky"><span class="label">' + DOWL[d.getDay()] + '</span><h2>' + d.getDate() + " de " + MONL[d.getMonth()] + "</h2>" +
+    '<div class="chips"><span class="chip">📅 ' + agenda.length + (agenda.length === 1 ? " evento" : " eventos") + '</span><span class="chip">✅ ' + open + (open === 1 ? " tarefa" : " tarefas") +
+    '</span><span class="chip">🌱 ' + data.habits.filter(h => done(TODAY, h.id)).length + "/" + data.habits.length + "</span></div></div>" +
+    '<div class="sec"><div class="sech"><h3>agenda</h3><button type="button" class="add" data-new="cals">calendários ›</button></div>' + errs +
+    (agenda.length ? '<ul class="list">' + agenda.map(a => a.edit ? eventLine({ id: a.edit, title: a.title, time: a.time })
+      : '<li><div class="line static"><span class="when">' + (a.time ? a.time + (a.until ? '<small>' + a.until + "</small>" : "") : "dia todo") + '</span><span class="eb"><span class="et">' + esc(a.title) + '</span><span class="meta">' + esc(a.cal) + (a.where ? " · " + esc(a.where) : "") + "</span></span></div></li>").join("") + "</ul>"
+      : '<p class="empty">' + (data.cals.length ? "Nada na agenda hoje." : "Nada na agenda. Ligue seus calendários do Outlook e da Apple em “calendários”.") + "</p>") + "</div>" +
+    '<div class="sec"><div class="sech"><h3>tarefas</h3><span class="label">' + open + " para fazer</span></div>" +
+    (late.length ? '<span class="flabel">ficaram de antes</span>' + late.map(taskLine).join("") : "") +
+    mine.sort((a, b) => a.done - b.done).map(taskLine).join("") +
+    '<form class="taskadd" id="taskadd"><input class="in" name="title" placeholder="nova tarefa…" autocomplete="off" aria-label="Nova tarefa" required><button class="nbtn" aria-label="Adicionar tarefa">+</button></form></div>' +
+    '<div class="sec"><div class="sech"><h3>hábitos</h3><span class="label">' + data.habits.filter(h => done(TODAY, h.id)).length + " / " + data.habits.length + "</span></div>" +
+    (data.habits.length ? '<div class="hlist">' + data.habits.map(h => habitCheck(h, TODAY)).join("") + "</div>" : '<p class="empty">Crie hábitos na aba Hábitos.</p>') + waterBlock(TODAY) + "</div>";
 }
 
 // ---------- desenho ----------
@@ -353,11 +466,11 @@ $("fprev").onclick = () => { const ms = finMonths(); finSel = ms[ms.indexOf(finS
 $("fnext").onclick = () => { const ms = finMonths(); finSel = ms[ms.indexOf(finSel) + 1] || finSel; renderFinance(); };
 $("fcard").addEventListener("toggle", e => { const d = e.target; if (d.dataset?.cat) d.open ? finOpen.add(d.dataset.cat) : finOpen.delete(d.dataset.cat); }, true);
 
-function render() { renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); Object.keys(KINDS).forEach(renderList); renderFinance(); }
+function render() { renderToday(); renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); Object.keys(KINDS).forEach(renderList); renderFinance(); }
 
 // ---------- folha de criar / editar ----------
 const ADD = { event: "Evento", workout: "Treino", "read-book": "Livro", "read-link": "Link" };
-const NAMES = { event: "novo evento", workout: "novo treino", habit: "novo hábito", book: "novo livro", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
+const NAMES = { task: "tarefa", cals: "calendários", event: "novo evento", workout: "novo treino", habit: "novo hábito", book: "novo livro", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
 const MONTHLY = { income: "renda", ape: "apartamento", prepaid: "pagamento antecipado" }; // valores de um mês só
 let sh = null; // { kind, obj, day, fromDay }
 const MONEY = 'type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"';
@@ -374,6 +487,10 @@ function fields(kind, o, day) {
     case "workout": return fld("tipo", '<select class="in" name="type">' + WTYPES.map(t => "<option" + (t === o?.type ? " selected" : "") + ">" + t + "</option>").join("") + "</select>") +
       pair(fld("dia", inp("date", 'type="date" required', o?.date || day)), fld("minutos", inp("min", 'type="number" min="1" inputmode="numeric"', o?.min))) +
       fld("como foi", txt("note", o?.note, "opcional"));
+    case "task": return fld("tarefa", inp("title", 'required autocomplete="off"', o?.title)) + fld("dia", inp("date", 'type="date" required', o?.date || day));
+    case "cals": return (data.cals.length ? '<ul class="list">' + data.cals.map(c => '<li class="line static"><span class="eb"><span class="et">' + esc(c.name) + '</span><span class="meta">' + esc(new URL(c.url.replace(/^webcals?:/, "https:")).hostname) + '</span></span><button type="button" class="del" data-delcal="' + c.id + '" aria-label="Remover ' + esc(c.name) + '">✕</button></li>').join("") + "</ul>" : "") +
+      fld("nome", inp("name", 'autocomplete="off" placeholder="ex: trabalho, pessoal"')) + fld("link do calendário (.ics)", inp("url", 'type="text" inputmode="url" autocomplete="off" placeholder="webcal://… ou https://….ics"')) +
+      '<p class="empty">Outlook: Configurações → Calendário → Calendários compartilhados → Publicar um calendário → link ICS. iPhone/iCloud: no app Calendário, toque no ⓘ do calendário → Calendário Público → copiar link. Quem tiver o link vê a agenda, então ele fica só na sua conta.</p>';
     case "habit": return fld("nome", inp("name", 'required autocomplete="off" placeholder="ex: beber 2 L de água"', o?.name));
     case "read-book": return openItems("book").length
       ? fld("livro", pick("book")) + pair(fld("da página", inp("from", 'type="number" min="1" inputmode="numeric"')), fld("até a página", inp("to", 'type="number" min="1" inputmode="numeric" required'))) + fld("nota", txt("note", "", "uma frase, uma ideia… (opcional)"))
@@ -442,7 +559,10 @@ $("shform").onsubmit = async e => {
   e.preventDefault();
   const f = e.target.elements, { kind, obj, day } = sh, v = n => (f[n]?.value ?? "").trim(), btn = $("shsave");
   const busy = t => { btn.disabled = true; btn.textContent = t; };
-  if (kind === "event") upsert(data.events, obj, { date: v("date"), time: v("time"), title: v("title") });
+  if (kind === "task") upsert(data.tasks, obj, { date: v("date"), title: v("title"), done: obj?.done || false });
+  else if (kind === "cals") {
+    if (v("url")) { data.cals.push({ id: uid(), name: v("name") || "calendário", url: v("url") }); closeSheet(); save(); return loadCals(); }
+  } else if (kind === "event") upsert(data.events, obj, { date: v("date"), time: v("time"), title: v("title") });
   else if (kind === "workout") upsert(data.workouts, obj, { date: v("date"), type: v("type"), min: +v("min") || null, note: v("note") });
   else if (kind === "habit") upsert(data.habits, obj, { name: v("name") });
   else if (kind === "read-book" || kind === "read-link") {
@@ -508,6 +628,7 @@ $("shdel").onclick = () => {
   const { kind, obj, day } = sh;
   if (kind === "entry") { data.days[day] = data.days[day].filter(x => x !== obj); if (!data.days[day].length) delete data.days[day]; }
   else if (kind === "event") data.events = data.events.filter(x => x !== obj);
+  else if (kind === "task") data.tasks = data.tasks.filter(x => x !== obj);
   else if (kind === "workout") data.workouts = data.workouts.filter(x => x !== obj);
   else if (kind === "fixed") data.finance.fixed = fin().fixed.filter(x => x !== obj);
   else if (kind === "card") {
@@ -537,6 +658,8 @@ $("cal").onclick = e => {
 };
 
 document.addEventListener("change", e => {
+  const tk = e.target.dataset.task && data.tasks.find(x => x.id === e.target.dataset.task);
+  if (tk) { tk.done = e.target.checked; return save(); }
   const t = e.target; if (!t.dataset.hk) return;
   const c = data.checks[t.dataset.day] ||= {};
   if (t.checked) c[t.dataset.hk] = 1; else delete c[t.dataset.hk];
@@ -551,12 +674,18 @@ document.addEventListener("click", e => {
     const [what, id] = ed.dataset.edit.split(":");
     if (what === "event") return openSheet("event", data.events.find(x => x.id === id));
     if (what === "workout") return openSheet("workout", data.workouts.find(x => x.id === id));
+    if (what === "task") return openSheet("task", data.tasks.find(x => x.id === id));
     if (what === "habit") return openSheet("habit", data.habits.find(x => x.id === id));
     if (MONTHLY[what]) return openSheet(what);
     if (what === "fixed" || what === "card") return openSheet(what, fin()[what].find(x => x.id === id));
     if (what === "entry") return openSheet("entry", (data.days[sel] || []).find(x => x.id === id), sel);
     const it = itemOf(id); if (it) return openSheet(it.kind, it);
     return;
+  }
+  const dc = e.target.closest("[data-delcal]");
+  if (dc) {
+    if (!confirm("Tirar este calendário da aurora?")) return;
+    data.cals = data.cals.filter(x => x.id !== dc.dataset.delcal); save(); drawSheet(); return loadCals();
   }
   const c = e.target.closest("[data-cup]");
   if (c) { // tocar no último copo cheio esvazia ele
@@ -568,6 +697,13 @@ document.addEventListener("click", e => {
   if (d) { const it = itemOf(d.dataset.done); if (it) { it.done = !it.done; save(); } }
 });
 
+document.addEventListener("submit", e => {
+  if (e.target.id !== "taskadd") return;
+  e.preventDefault();
+  const title = e.target.elements.title.value.trim(); if (!title) return;
+  data.tasks.push({ id: uid(), date: TODAY, title, done: false }); save();
+  $("taskadd").elements.title.focus(); // continua digitando a próxima
+});
 $("tabbar").onclick = e => {
   const b = e.target.closest("[data-tab]"); if (!b) return;
   $("tabbar").querySelectorAll("[data-tab]").forEach(x => {
@@ -626,7 +762,8 @@ $("logout").onclick = async () => {
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
   if (setToday()) render();
-  if (user) pull();
+  if (user) pull(); else if (data.cals.length && Date.now() - icsAt > 6e5) loadCals();
 });
 
 render();
+if (data.cals.length) loadCals();
