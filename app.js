@@ -23,7 +23,7 @@ const uid = () => crypto.randomUUID();
    workouts treinos                 [{ id, date, type, min, note }]
    events   eventos                 [{ id, date, time, title }]
    water    copos de 200 ml por dia { "2026-10-26": 6 }
-   tasks    tarefas                 [{ id, date, title, done }]
+   tasks    tarefas                 [{ id, date, title, desc, done, ev? }]
    notes    anotações por evento    { "uid|2026-11-03" ou "ev:id": [{ id, t, task }] }  (task = já virou tarefa)
    cals     calendários assinados   [{ id, name, url }]  (link .ics secreto: fica só na conta, nunca no código)
    finance  planejador              { income: {mês: R$}, prepaid: {mês: R$}, ape: {mês: {parcela, evolucao}},
@@ -254,7 +254,8 @@ function agendaHTML(k) {
 
 // ---------- hoje: agenda, tarefas, hábitos e água numa tela ----------
 const taskLine = t => '<div class="task' + (t.done ? " on" : "") + '"><label class="hrow"><input type="checkbox" data-task="' + t.id + '"' + (t.done ? " checked" : "") + "><span>" + esc(t.title) + (t.ev ? '<small class="from">' + esc(t.ev) + "</small>" : "") + "</span></label>" +
-  (t.date < TODAY ? '<span class="meta">' + fmt(t.date) + "</span>" : "") + '<button type="button" class="del" data-edit="task:' + t.id + '" aria-label="Editar tarefa">✎</button></div>';
+  (t.date < TODAY ? '<span class="meta">' + fmt(t.date) + "</span>" : "") + '<button type="button" class="del" data-edit="task:' + t.id + '" aria-label="Editar tarefa">✎</button>' +
+  (t.desc ? '<details class="tdesc"><summary>descrição</summary><p>' + esc(t.desc).replace(/\n/g, "<br>") + "</p></details>" : "") + "</div>";
 function renderToday() {
   const d = toDate(TODAY);
   const n = agendaOf(TODAY), count = n.allDay.length + n.timed.length;
@@ -514,7 +515,7 @@ function fields(kind, o, day) {
           '<button type="button" class="del" data-ndel="' + x.id + '" aria-label="Apagar anotação">✕</button></li>').join("") + "</ul>" : "") +
         fld("anotação", txt("note", "", "ex: mandar a pauta antes, levar os números…"));
     }
-    case "task": return fld("tarefa", inp("title", 'required autocomplete="off"', o?.title)) + fld("dia", inp("date", 'type="date" required', o?.date || day));
+    case "task": return fld("título", inp("title", 'required autocomplete="off"', o?.title)) + fld("descrição", txt("desc", o?.desc, "detalhes, links, passo a passo… (opcional)")) + fld("dia", inp("date", 'type="date" required', o?.date || day));
     case "cals": return (data.cals.length ? '<ul class="list">' + data.cals.map(c => '<li class="line static"><span class="eb"><span class="et">' + esc(c.name) + '</span><span class="meta">' + esc(new URL(c.url.replace(/^webcals?:/, "https:")).hostname) + '</span></span><button type="button" class="del" data-delcal="' + c.id + '" aria-label="Remover ' + esc(c.name) + '">✕</button></li>').join("") + "</ul>" : "") +
       fld("nome", inp("name", 'autocomplete="off" placeholder="ex: trabalho, pessoal"')) + fld("link do calendário (.ics)", inp("url", 'type="text" inputmode="url" autocomplete="off" placeholder="webcal://… ou https://….ics"')) +
       '<p class="empty">Outlook: Configurações → Calendário → Calendários compartilhados → Publicar um calendário → link ICS. iPhone/iCloud: no app Calendário, toque no ⓘ do calendário → Calendário Público → copiar link. Quem tiver o link vê a agenda, então ele fica só na sua conta.</p>';
@@ -574,7 +575,7 @@ $("shform").onsubmit = async e => {
   const busy = t => { btn.disabled = true; btn.textContent = t; };
   if (kind === "evnote") {
     if (v("note")) { (data.notes[obj.key] ||= []).push({ id: uid(), t: v("note") }); save(); drawSheet(); return; } // continua aberta para anotar mais
-  } else if (kind === "task") upsert(data.tasks, obj, { date: v("date"), title: v("title"), done: obj?.done || false });
+  } else if (kind === "task") upsert(data.tasks, obj, { date: v("date"), title: v("title"), desc: v("desc"), done: obj?.done || false });
   else if (kind === "cals") {
     if (v("url")) { data.cals.push({ id: uid(), name: v("name") || "calendário", url: v("url") }); closeSheet(); save(); return loadCals(); }
   } else if (kind === "event") upsert(data.events, obj, { date: v("date"), time: v("time"), title: v("title") });

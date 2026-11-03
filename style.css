@@ -254,7 +254,14 @@ button.fs:active{background:var(--hover)}
 .line.static{cursor:default}
 .line.static:active{background:none}
 .when small{display:block;font-weight:500;color:var(--muted);font-size:.75rem}
-.task{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--hair)}
+.task{display:flex;flex-wrap:wrap;align-items:center;gap:0 6px;border-bottom:1px solid var(--hair)}
+.task>.hrow{flex:1}
+.tdesc{flex-basis:100%;padding:0 0 10px 38px}
+.tdesc summary{cursor:pointer;font-size:.8rem;font-weight:600;color:var(--soft);list-style:none;width:max-content}
+.tdesc summary::-webkit-details-marker{display:none}
+.tdesc summary::before{content:"▸ ";display:inline-block;transition:transform .15s}
+.tdesc[open] summary::before{transform:rotate(90deg)}
+.tdesc p{margin:6px 0 0;font-size:.9rem;color:var(--soft);overflow-wrap:anywhere}
 .task .meta{white-space:nowrap}
 .taskadd{display:flex;gap:8px;margin-top:4px}
 .from{display:block;font-size:.75rem;color:var(--muted)}
