@@ -5,7 +5,7 @@ const KEY = "aurora-caderno", PENDING = "aurora-pendente";
 const DOWL = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
 const MONL = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 const START = "2026-11"; // o app mostra só a partir daqui; os dados antigos continuam salvos
-const KINDS = { book: ["Livro", "▤"], link: ["Link", "↗"] };
+const KINDS = { book: ["Livro", "▤"], link: ["Link", "↗"] }; // livros saíram do app; o tipo fica para ler dados antigos sem quebrar
 const WTYPES = ["Academia","Bike","Caminhada","Canoagem","Corrida","Yoga","Outro"];
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -91,7 +91,6 @@ setInterval(() => { if (setToday()) render(); }, 60000);
 // ---------- consultas ----------
 const itemOf = id => data.items.find(i => i.id === id);
 const entriesOf = id => Object.entries(data.days).flatMap(([day, es]) => es.filter(e => e.item === id).map(e => ({ ...e, day })));
-const lastPage = id => Math.max(0, ...entriesOf(id).map(e => +e.to || 0));
 const done = (k, hid) => !!data.checks[k]?.[hid];
 const habRatio = k => data.habits.length ? data.habits.filter(h => done(k, h.id)).length / data.habits.length : 0;
 function streak(hid) {
@@ -111,29 +110,6 @@ async function preview(url) {
   } catch {}
   const host = new URL(url).hostname.replace(/^www\./, "");
   return { url, title: host, image: "", site: host, desc: "" };
-}
-// Procura o livro: Google Books (pelo Worker, se tiver chave) e, sem capa lá, Open Library. Com ISBN acerta a edição.
-async function lookupBook(title, author, isbn) {
-  isbn = isbn.replace(/[^\dX]/gi, "");
-  let g = {};
-  try {
-    const q = isbn ? "isbn:" + isbn : "intitle:" + title + (author ? " inauthor:" + author : "");
-    g = await (await fetch("/api/book?q=" + encodeURIComponent(q), { signal: AbortSignal.timeout(6000) })).json();
-    if (g.image) return g;
-  } catch {}
-  try {
-    const p = new URLSearchParams({ limit: 5, fields: "title,author_name,number_of_pages_median,cover_i" });
-    if (isbn) p.set("isbn", isbn); else p.set("q", (title + " " + author).trim()); // texto livre acha mais que título/autor separados
-    const docs = (await (await fetch("https://openlibrary.org/search.json?" + p, { signal: AbortSignal.timeout(6000) })).json()).docs || [];
-    const d = docs.find(x => x.cover_i) || docs[0];
-    if (d) return {
-      title: g.title || d.title, pages: g.pages || d.number_of_pages_median || null,
-      // o mesmo autor costuma vir com e sem acento: fica um só
-      author: g.author || [...new Map((d.author_name || []).map(n => [n.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase(), n])).values()].join(", "),
-      image: d.cover_i ? "https://covers.openlibrary.org/b/id/" + d.cover_i + "-M.jpg" : "",
-    };
-  } catch {}
-  return g;
 }
 function newLink(p) {
   const it = { id: uid(), kind: "link", url: p.url, title: p.title, image: p.image, site: p.site, desc: p.desc, created: TODAY };
@@ -282,8 +258,7 @@ const workoutLine = w => lineBtn("workout:" + w.id, '<span class="eb"><span clas
 const eventLine = (e, withDate) => lineBtn("event:" + e.id, '<span class="when">' + (withDate ? fmt(e.date) + (e.time ? " · " : "") : "") + (e.time || (withDate ? "" : "dia todo")) + '</span><span class="et">' + esc(e.title) + "</span>");
 const entryLine = e => {
   const it = itemOf(e.item); if (!it) return "";
-  const pages = e.from || e.to ? " · p. " + (e.from || "?") + "–" + (e.to || "?") : "";
-  return lineBtn("entry:" + e.id, thumb(it, "th") + '<span class="eb"><span class="et">' + esc(it.title) + '</span><span class="meta">' + KINDS[it.kind][0] + pages + "</span>" + note(e.note) + "</span>");
+  return lineBtn("entry:" + e.id, thumb(it, "th") + '<span class="eb"><span class="et">' + esc(it.title) + '</span><span class="meta">' + KINDS[it.kind][0] + "</span>" + note(e.note) + "</span>");
 };
 
 function renderCal() {
@@ -294,7 +269,7 @@ function renderCal() {
   let h = ["seg","ter","qua","qui","sex","sáb","dom"].map(d => '<span class="dow">' + d + '</span>').join("") + "<span></span>".repeat(off);
   for (let n = 1; n <= last; n++) {
     const k = iso(new Date(y, m, n));
-    const its = [...new Set((data.days[k] || []).map(e => e.item))].map(itemOf).filter(Boolean);
+    const its = [...new Set((data.days[k] || []).map(e => e.item))].map(itemOf).filter(it => it?.kind === "link");
     const ev = data.events.some(e => e.date === k), wo = data.workouts.some(w => w.date === k), r = habRatio(k);
     h += '<button type="button" class="cd' + (k === sel ? " sel" : "") + (k === TODAY ? " today" : "") + '" data-d="' + k + '" aria-label="' + n + " de " + MONL[m] + '">' +
       '<span class="n">' + n + '</span>' +
@@ -307,7 +282,7 @@ function renderCal() {
 
 const block = (title, body) => '<div class="block"><span class="flabel">' + title + "</span>" + body + "</div>";
 function renderDay() {
-  const d = toDate(sel), es = data.days[sel] || [], evs = eventsOn(sel), wos = workoutsOn(sel);
+  const d = toDate(sel), es = (data.days[sel] || []).filter(e => itemOf(e.item)?.kind === "link"), evs = eventsOn(sel), wos = workoutsOn(sel);
   let h = '<div class="sech"><h3>' + d.getDate() + " de " + MONL[d.getMonth()] + '</h3><span class="label">' + DOWL[d.getDay()] + (sel === TODAY ? " · hoje" : "") + "</span></div>";
   // só aparecem os blocos que têm algo; água e hábitos sempre, para marcar
   if (evs.length) h += block("Eventos", '<ul class="list">' + evs.map(e => eventLine(e)).join("") + "</ul>");
@@ -357,14 +332,9 @@ function renderList(kind) {
   const its = data.items.filter(i => i.kind === kind).sort((a, b) => (!!a.done - !!b.done) || (b.created > a.created ? 1 : -1));
   $("list-" + kind).innerHTML = its.length ? its.map(it => {
     const days = [...new Set(entriesOf(it.id).map(e => e.day))].sort();
-    let prog = "";
-    if (kind === "book" && it.pages) {
-      const p = lastPage(it.id);
-      prog = '<span class="bar"><i style="width:' + Math.min(100, p / it.pages * 100) + '%"></i></span><span class="meta">p. ' + p + " de " + it.pages + "</span>";
-    }
     const title = it.url ? '<a class="ct" href="' + esc(it.url) + '" target="_blank" rel="noopener">' + esc(it.title) + "</a>" : '<span class="ct">' + esc(it.title) + "</span>";
     return '<article class="card' + (it.done ? " done" : "") + '">' + thumb(it, "cover") + '<div class="cbody">' + title +
-      '<span class="cs">' + esc(kind === "book" ? it.author : it.site) + "</span>" + prog +
+      '<span class="cs">' + esc(it.site) + "</span>" +
       '<span class="meta">' + (days.length ? days.length + (days.length > 1 ? " dias" : " dia") + " · desde " + fmt(days[0]) : "ainda sem registro") + (it.done ? " · terminado" : "") + "</span>" + note(it.note) +
       '<div class="cact"><button type="button" data-done="' + it.id + '">' + (it.done ? "reabrir" : "terminei") + '</button><button type="button" data-edit="item:' + it.id + '">editar</button></div></div></article>';
   }).join("") : '<p class="empty">Nada por aqui ainda.</p>';
@@ -466,11 +436,11 @@ $("fprev").onclick = () => { const ms = finMonths(); finSel = ms[ms.indexOf(finS
 $("fnext").onclick = () => { const ms = finMonths(); finSel = ms[ms.indexOf(finSel) + 1] || finSel; renderFinance(); };
 $("fcard").addEventListener("toggle", e => { const d = e.target; if (d.dataset?.cat) d.open ? finOpen.add(d.dataset.cat) : finOpen.delete(d.dataset.cat); }, true);
 
-function render() { renderToday(); renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); Object.keys(KINDS).forEach(renderList); renderFinance(); }
+function render() { renderToday(); renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); renderList("link"); renderFinance(); }
 
 // ---------- folha de criar / editar ----------
-const ADD = { event: "Evento", workout: "Treino", "read-book": "Livro", "read-link": "Link" };
-const NAMES = { task: "tarefa", cals: "calendários", event: "novo evento", workout: "novo treino", habit: "novo hábito", book: "novo livro", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
+const ADD = { event: "Evento", workout: "Treino", "read-link": "Link" };
+const NAMES = { task: "tarefa", cals: "calendários", event: "novo evento", workout: "novo treino", habit: "novo hábito", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
 const MONTHLY = { income: "renda", ape: "apartamento", prepaid: "pagamento antecipado" }; // valores de um mês só
 let sh = null; // { kind, obj, day, fromDay }
 const MONEY = 'type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"';
@@ -492,20 +462,12 @@ function fields(kind, o, day) {
       fld("nome", inp("name", 'autocomplete="off" placeholder="ex: trabalho, pessoal"')) + fld("link do calendário (.ics)", inp("url", 'type="text" inputmode="url" autocomplete="off" placeholder="webcal://… ou https://….ics"')) +
       '<p class="empty">Outlook: Configurações → Calendário → Calendários compartilhados → Publicar um calendário → link ICS. iPhone/iCloud: no app Calendário, toque no ⓘ do calendário → Calendário Público → copiar link. Quem tiver o link vê a agenda, então ele fica só na sua conta.</p>';
     case "habit": return fld("nome", inp("name", 'required autocomplete="off" placeholder="ex: beber 2 L de água"', o?.name));
-    case "read-book": return openItems("book").length
-      ? fld("livro", pick("book")) + pair(fld("da página", inp("from", 'type="number" min="1" inputmode="numeric"')), fld("até a página", inp("to", 'type="number" min="1" inputmode="numeric" required'))) + fld("nota", txt("note", "", "uma frase, uma ideia… (opcional)"))
-      : '<p class="empty">Nenhum livro em andamento. Crie um em Conteúdo → Livros.</p>';
     case "read-link": return fld("link", pick("link", true)) + inp("url", 'type="url" placeholder="cole o link do podcast, artigo, vídeo…"' + (openItems("link").length ? " hidden" : "")) + fld("nota", txt("note", "", "opcional"));
     case "entry": {
       const it = itemOf(o.item);
       return '<p class="shitem">' + thumb(it, "th") + "<b>" + esc(it.title) + "</b></p>" +
-        (it.kind === "book" ? pair(fld("da página", inp("from", 'type="number" min="1" inputmode="numeric"', o.from)), fld("até a página", inp("to", 'type="number" min="1" inputmode="numeric"', o.to))) : "") +
         fld("dia", inp("date", 'type="date" required', day)) + fld("nota", txt("note", o.note, "opcional"));
     }
-    case "book": return fld("título", inp("title", 'autocomplete="off" placeholder="ou só o ISBN abaixo"', o?.title)) + fld("autor(a)", inp("author", 'autocomplete="off"', o?.author)) +
-      pair(fld("ISBN", inp("isbn", 'inputmode="numeric" autocomplete="off" placeholder="verso do livro"', o?.isbn)), fld("páginas", inp("pages", 'type="number" min="1" inputmode="numeric"', o?.pages))) +
-      fld("capa (link)", inp("cover", 'type="url" placeholder="vazio: eu procuro"', o?.image)) +
-      fld("nota", txt("note", o?.note, "o que achou (opcional)"));
     case "link": return o
       ? fld("título", inp("title", 'required autocomplete="off"', o.title)) + fld("endereço", inp("url", 'type="url" required', o.url)) + fld("nota", txt("note", o.note, "opcional"))
       : fld("link", inp("url", 'type="url" required placeholder="cole o link do podcast, artigo, vídeo…"')) + '<label class="chk"><input type="checkbox" name="today" checked> consumi hoje</label>';
@@ -530,13 +492,8 @@ function drawSheet() {
   $("shfields").innerHTML = fields(kind, obj, day);
   $("shdel").hidden = !obj;
   const btn = $("shsave");
-  btn.disabled = kind === "read-book" && !openItems("book").length;
+  btn.disabled = false;
   btn.textContent = "salvar";
-  prefillPages();
-}
-function prefillPages() {
-  const f = $("shform").elements;
-  if (sh.kind === "read-book" && f.pick) f.from.value = lastPage(f.pick.value) + 1;
 }
 function openSheet(kind, obj = null, day = sel, fromDay = false) {
   sh = { kind, obj, day, fromDay };
@@ -551,7 +508,6 @@ $("shfields").addEventListener("change", e => {
   if (e.target.name !== "pick") return;
   const url = $("shform").elements.url;
   if (url && sh.kind === "read-link") { url.hidden = !!e.target.value; url.required = !e.target.value; if (!url.hidden) url.focus(); }
-  prefillPages();
 });
 const upsert = (arr, obj, vals) => obj ? Object.assign(obj, vals) : arr.push({ id: uid(), ...vals });
 
@@ -565,7 +521,7 @@ $("shform").onsubmit = async e => {
   } else if (kind === "event") upsert(data.events, obj, { date: v("date"), time: v("time"), title: v("title") });
   else if (kind === "workout") upsert(data.workouts, obj, { date: v("date"), type: v("type"), min: +v("min") || null, note: v("note") });
   else if (kind === "habit") upsert(data.habits, obj, { name: v("name") });
-  else if (kind === "read-book" || kind === "read-link") {
+  else if (kind === "read-link") {
     let id = v("pick");
     if (!id && kind === "read-link") {
       if (!v("url")) return f.url.focus();
@@ -574,29 +530,15 @@ $("shform").onsubmit = async e => {
     }
     if (!id) return;
     const en = { id: uid(), item: id, note: v("note") };
-    if (kind === "read-book") { en.from = +v("from") || null; en.to = +v("to") || null; }
     (data.days[day] ||= []).push(en);
   } else if (kind === "entry") {
     obj.note = v("note");
-    if (f.from) { obj.from = +v("from") || null; obj.to = +v("to") || null; }
     const nd = v("date");
     if (nd && nd !== day) { // mudou de dia
       data.days[day] = data.days[day].filter(x => x !== obj);
       if (!data.days[day].length) delete data.days[day];
       (data.days[nd] ||= []).push(obj);
     }
-  } else if (kind === "book") {
-    const o = obj || { id: uid(), kind: "book", created: TODAY };
-    let title = v("title"), author = v("author"), pages = +v("pages") || null, image = v("cover");
-    const isbn = v("isbn");
-    if (!title && !isbn) return f.title.focus();
-    if (!image || !title) { // falta capa ou título: procura e completa só o que estiver vazio
-      busy("procurando o livro…");
-      const b = await lookupBook(title, author, isbn);
-      title ||= b.title || "ISBN " + isbn; author ||= b.author || ""; pages ||= b.pages || null; image ||= b.image || "";
-    }
-    Object.assign(o, { title, author, pages, image, isbn, note: v("note") });
-    if (!obj) data.items.push(o);
   } else if (MONTHLY[kind]) {
     const F = fin();
     if (kind === "ape") {
@@ -712,10 +654,6 @@ $("tabbar").onclick = e => {
     $(x.dataset.tab).hidden = !on;
   });
   scrollTo(0, 0);
-};
-$("cseg").onclick = e => {
-  const b = e.target.closest("[data-c]"); if (!b) return;
-  $("cseg").querySelectorAll("[data-c]").forEach(x => { x.setAttribute("aria-pressed", x === b); $("c-" + x.dataset.c).hidden = x !== b; });
 };
 
 // ---------- login com e-mail e senha ----------

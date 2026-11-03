@@ -284,3 +284,21 @@ body:not(.out) .login{display:none}
   .mini{width:18px;height:18px}
 }
 @media (prefers-reduced-motion:reduce){.nbtn{transition:none}}
+
+/* PC: ocupa a tela toda, com as seções lado a lado */
+@media (min-width:960px){
+  .wrap{max-width:none;padding-left:max(32px,4vw);padding-right:max(32px,4vw)}
+  .tab:not(#tab-cal){grid-template-columns:repeat(auto-fit,minmax(360px,1fr));align-items:start}
+  .tab>:is(.newbtn,.monthhead,.fstrip,.fsum,.todayhead,.cards){grid-column:1/-1}
+  #tab-today{display:block}
+  .newbtn{max-width:420px;justify-self:start}
+  .cards{grid-template-columns:repeat(auto-fill,minmax(360px,1fr))}
+  /* dias: calendário à esquerda, o dia à direita */
+  #tab-cal{grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr);align-items:start;column-gap:28px}
+  #tab-cal>*{grid-column:1}
+  #tab-cal #day{grid-column:2;grid-row:1/span 3;position:sticky;top:90px}
+  .cd{min-height:84px}
+  .fsum{grid-template-columns:repeat(4,1fr)}
+  .fs.left{grid-column:auto}
+  .sheet{max-width:560px;margin:auto;border-radius:28px}
+}

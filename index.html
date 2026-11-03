@@ -85,18 +85,8 @@
   </section>
 
   <section class="tab" id="tab-ct" hidden>
-    <div class="seg two" id="cseg">
-      <button type="button" data-c="book" aria-pressed="true">Livros</button>
-      <button type="button" data-c="link" aria-pressed="false">Links</button>
-    </div>
-    <div class="tab" id="c-book">
-      <button type="button" class="newbtn" data-new="book">+ novo livro</button>
-      <div class="cards" id="list-book"></div>
-    </div>
-    <div class="tab" id="c-link" hidden>
-      <button type="button" class="newbtn" data-new="link">+ novo link</button>
-      <div class="cards" id="list-link"></div>
-    </div>
+    <button type="button" class="newbtn" data-new="link">+ novo link</button>
+    <div class="cards" id="list-link"></div>
   </section>
 </div>
 
@@ -114,7 +104,7 @@
 <dialog class="sheet" id="sheet" aria-labelledby="shtitle">
   <form id="shform">
     <div class="sech"><h3 id="shtitle"></h3><button type="button" class="del" id="shclose" aria-label="Fechar">✕</button></div>
-    <div class="seg four" id="shseg" hidden></div>
+    <div class="seg" id="shseg" hidden></div>
     <div class="shfields" id="shfields"></div>
     <div class="shbtns">
       <button class="nbtn txt" id="shsave">salvar</button>
