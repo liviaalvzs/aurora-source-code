@@ -4,6 +4,7 @@ const SB_KEY = "sb_publishable_ChgKrC8ouh2PT4k5vJeF_w_CiUWVO12";
 const KEY = "aurora-caderno", PENDING = "aurora-pendente";
 const DOWL = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
 const MONL = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+const START = "2026-11"; // o app mostra só a partir daqui; os dados antigos continuam salvos
 const KINDS = { book: ["Livro", "▤"], link: ["Link", "↗"] };
 const WTYPES = ["Academia","Bike","Caminhada","Canoagem","Corrida","Yoga","Outro"];
 const $ = id => document.getElementById(id);
@@ -173,6 +174,7 @@ const entryLine = e => {
 };
 
 function renderCal() {
+  $("mprev").disabled = view.getFullYear() * 12 + view.getMonth() <= mnum(START);
   $("month").textContent = MONL[view.getMonth()] + " " + view.getFullYear();
   const y = view.getFullYear(), m = view.getMonth();
   const off = (view.getDay() + 6) % 7, last = new Date(y, m + 1, 0).getDate();
@@ -208,7 +210,7 @@ function renderHabits() {
     data.habits.map(x => {
       const s = streak(x.id);
       let dots = "";
-      for (let i = 13; i >= 0; i--) { const k = addDays(TODAY, -i); dots += '<i class="' + (done(k, x.id) ? "on" : "") + '" title="' + fmt(k) + '"></i>'; }
+      for (let i = 13; i >= 0; i--) { const k = addDays(TODAY, -i); if (k < START) continue; dots += '<i class="' + (done(k, x.id) ? "on" : "") + '" title="' + fmt(k) + '"></i>'; }
       return '<div class="habit">' + habitCheck(x, TODAY) + '<button type="button" class="del" data-edit="habit:' + x.id + '" aria-label="Editar hábito ' + esc(x.name) + '">✎</button>' +
         '<div class="hmeta"><span class="dots14">' + dots + '</span><span class="meta">' + (s ? s + (s > 1 ? " dias seguidos" : " dia") : "") + "</span></div></div>";
     }).join("") : '<p class="empty">Nenhum hábito ainda. Crie o primeiro acima.</p>');
@@ -232,7 +234,7 @@ function renderWorkouts() {
 }
 
 function renderEvents() {
-  const next = data.events.filter(e => e.date >= TODAY).sort(byTime), past = data.events.filter(e => e.date < TODAY).sort(byTime).reverse();
+  const next = data.events.filter(e => e.date >= TODAY).sort(byTime), past = data.events.filter(e => e.date < TODAY && e.date >= START).sort(byTime).reverse();
   $("evnext").innerHTML = '<div class="sech"><h3>Próximos</h3></div>' + (next.length ? '<ul class="list">' + next.map(e => eventLine(e, true)).join("") + "</ul>" : '<p class="empty">Nenhum evento marcado.</p>');
   $("evpastbox").hidden = !past.length;
   $("evpast").innerHTML = '<ul class="list">' + past.map(e => eventLine(e, true)).join("") + "</ul>";
@@ -290,7 +292,7 @@ const apeFor = k => (+fin().ape[k]?.parcela || 0) + (+fin().ape[k]?.evolucao || 
 const cardTotal = k => sumv(cardItems(k)) - (fin().prepaid[k] || 0);
 function finMonths() {
   const cur = mnum(TODAY.slice(0, 7)), starts = [...fin().card, ...fin().fixed].map(x => mnum(x.start));
-  const first = Math.min(cur, ...starts), last = Math.max(cur, ...starts) + 11;
+  const first = Math.max(mnum(START), Math.min(cur, ...starts)), last = Math.max(cur, ...starts) + 11;
   return Array.from({ length: last - first + 1 }, (_, i) => mkey(first + i));
 }
 let finSel = null;

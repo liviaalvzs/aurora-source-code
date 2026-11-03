@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#fbfaf7">
+<meta name="theme-color" content="#ffffff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -13,19 +13,18 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Manrope:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="out">
 <header class="appbar">
-  <img class="logo" src="/icon.svg" alt="">
-  <h1>aurora</h1>
+  <h1 class="chrome">aurora</h1>
   <span class="sync" id="sync"></span>
   <button type="button" class="nbtn txt" id="logout">sair</button>
 </header>
 
 <form class="sec login" id="login">
-  <h3>entrar</h3>
+  <h3 class="chrome">oi!</h3>
   <input class="in" name="email" type="email" placeholder="seu@email.com" autocomplete="email" aria-label="E-mail" required>
   <input class="in" name="password" type="password" placeholder="senha (mínimo 6 caracteres)" autocomplete="current-password" aria-label="Senha" minlength="6" required>
   <div class="loginbtns">
@@ -38,7 +37,7 @@
 
 <div class="wrap">
   <section class="tab" id="tab-cal">
-    <div class="monthhead">
+    <div class="monthhead sky">
       <button type="button" class="nbtn" id="mprev" aria-label="Mês anterior">←</button>
       <h2 id="month"></h2>
       <button type="button" class="nbtn" id="mnext" aria-label="Próximo mês">→</button>
@@ -70,7 +69,7 @@
 
   <section class="tab" id="tab-fin" hidden>
     <div class="fstrip" id="fstrip" role="group" aria-label="Fatura do cartão por mês"></div>
-    <div class="monthhead">
+    <div class="monthhead sky">
       <button type="button" class="nbtn" id="fprev" aria-label="Mês anterior">←</button>
       <h2 id="fmonth"></h2>
       <button type="button" class="nbtn" id="fnext" aria-label="Próximo mês">→</button>
