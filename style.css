@@ -296,9 +296,18 @@ body:not(.out) .login{display:none}
   /* dias: calendário à esquerda, o dia à direita */
   #tab-cal{grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr);align-items:start;column-gap:28px}
   #tab-cal>*{grid-column:1}
-  #tab-cal #day{grid-column:2;grid-row:1/span 3;position:sticky;top:90px}
+  #tab-cal #day{grid-column:2;grid-row:1/span 3;position:sticky;top:28px}
   .cd{min-height:84px}
   .fsum{grid-template-columns:repeat(4,1fr)}
   .fs.left{grid-column:auto}
   .sheet{max-width:560px;margin:auto;border-radius:28px}
+  /* menu lateral preto; o topo some e o "sair" desce para o pé do menu */
+  body:not(.out){padding-left:236px}
+  .tabbar{left:16px;top:16px;bottom:16px;transform:none;width:204px;max-width:none;flex-direction:column;justify-content:flex-start;gap:4px;padding:12px;border-radius:28px}
+  .tabbar button{flex:none;height:48px;flex-direction:row;justify-content:flex-start;gap:12px;padding:0 16px;font-size:.95rem}
+  .tabbar .ico{width:22px;height:22px}
+  body:not(.out) .appbar{position:fixed;z-index:11;left:28px;bottom:28px;top:auto;width:180px;padding:0;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;flex-wrap:wrap}
+  body:not(.out) .appbar h1{display:none}
+  body:not(.out) .appbar .sync{color:#ffffffb3;flex-basis:100%}
+  .wrap{padding-top:28px;padding-bottom:40px}
 }
