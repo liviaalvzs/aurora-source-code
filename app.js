@@ -140,6 +140,7 @@ function parseICS(text, cal) {
     else if (name === "LOCATION") ev.where = icsUnesc(val);
     else if (name === "UID") ev.uid = val;
     else if (name === "STATUS") ev.status = val;
+    else if (name === "X-MICROSOFT-CDO-ALLDAYEVENT") ev.msAllDay = val === "TRUE"; // o Outlook manda dia inteiro como 00:00 → 00:00
     else if (name === "DTSTART") { const t = icsDate(val, params); if (t) { ev.start = t.d; ev.allDay = t.allDay; } }
     else if (name === "DTEND") ev.end = icsDate(val, params)?.d;
     else if (name === "RRULE") ev.rule = Object.fromEntries(val.split(";").map(p => p.split("=")));
@@ -196,10 +197,13 @@ function calEventsOn(k) {
     const s = iso(e.start), end = e.end ? iso(new Date(e.end - (e.allDay ? 864e5 : 1))) : s; // fim do dia inteiro é exclusivo
     return k >= s && k <= end;
   }).map(e => {
-    const s = iso(e.start) === k ? e.start.getHours() * 60 + e.start.getMinutes() : 0; // evento que começou ontem entra à meia-noite
-    const dur = e.end ? Math.round((e.end - e.start) / 6e4) : 0;
+    // pedaço do evento que cai no dia k: quem começou ontem entra à meia-noite, quem termina amanhã sai às 24:00
+    const d0 = toDate(k), dur = e.end ? e.end - e.start : 30 * 6e4;
+    const st = e.rule ? new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), e.start.getHours(), e.start.getMinutes()) : e.start;
+    const a = Math.max(st, d0), b = Math.min(st.getTime() + dur, +toDate(addDays(k, 1)));
+    const allDay = e.allDay || e.msAllDay || b - a >= 864e5 - 6e4; // ocupa o dia todo: vai para o topo, não vira bloco
     return { key: e.uid + "|" + k, cal: e.cal.name, color: calColor(e.cal.id), title: e.title || "(sem título)", where: shortWhere(e.where),
-      allDay: e.allDay, s, e: Math.min(1440, s + (dur || 30)) };
+      allDay, s: Math.round((a - d0) / 6e4), e: Math.max(Math.round((b - d0) / 6e4), Math.round((a - d0) / 6e4) + 15) };
   });
 }
 // cada calendário tem uma cor; os eventos criados aqui na aurora ficam em verde-limão
