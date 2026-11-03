@@ -24,13 +24,14 @@ const uid = () => crypto.randomUUID();
    events   eventos                 [{ id, date, time, title }]
    water    copos de 200 ml por dia { "2026-10-26": 6 }
    tasks    tarefas                 [{ id, date, title, done }]
+   notes    anotações por evento    { "uid|2026-11-03" ou "ev:id": [{ id, t, task }] }  (task = já virou tarefa)
    cals     calendários assinados   [{ id, name, url }]  (link .ics secreto: fica só na conta, nunca no código)
    finance  planejador              { income: {mês: R$}, prepaid: {mês: R$}, ape: {mês: {parcela, evolucao}},
                                       fixed: [{ id, name, value, start: mês, rec }],
                                       card: [{ id, desc, cat, value, start: mês, n, N, rec }] }  (mês = "2026-11") */
 const norm = d => {
   d = d && typeof d === "object" ? d : {};
-  d.items ||= []; d.days ||= {}; d.habits ||= []; d.checks ||= {}; d.workouts ||= []; d.events ||= []; d.water ||= {}; d.tasks ||= []; d.cals ||= [];
+  d.items ||= []; d.days ||= {}; d.habits ||= []; d.checks ||= {}; d.workouts ||= []; d.events ||= []; d.water ||= {}; d.tasks ||= []; d.cals ||= []; d.notes ||= {};
   const F = d.finance ||= {}; F.income ||= {}; F.prepaid ||= {}; F.ape ||= {}; F.fixed ||= []; F.card ||= [];
   d.items.forEach(i => { if (i.kind === "podcast" || i.kind === "text") i.kind = "link"; }); // podcasts e textos viraram links
   return d;
@@ -195,30 +196,77 @@ function calEventsOn(k) {
     const s = iso(e.start), end = e.end ? iso(new Date(e.end - (e.allDay ? 864e5 : 1))) : s; // fim do dia inteiro é exclusivo
     return k >= s && k <= end;
   }).map(e => {
-    const hm = d => String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
-    const dur = e.end ? e.end - e.start : 0;
-    return { cal: e.cal.name, title: e.title || "(sem título)", where: e.where, time: e.allDay ? "" : hm(e.start), until: e.allDay || !dur ? "" : hm(new Date(e.start.getTime() + dur)) };
+    const s = iso(e.start) === k ? e.start.getHours() * 60 + e.start.getMinutes() : 0; // evento que começou ontem entra à meia-noite
+    const dur = e.end ? Math.round((e.end - e.start) / 6e4) : 0;
+    return { key: e.uid + "|" + k, cal: e.cal.name, color: calColor(e.cal.id), title: e.title || "(sem título)", where: shortWhere(e.where),
+      allDay: e.allDay, s, e: Math.min(1440, s + (dur || 30)) };
   });
+}
+// cada calendário tem uma cor; os eventos criados aqui na aurora ficam em verde-limão
+const CAL_COLORS = ["#d9ebfb", "#ffe7f8", "#e7defd", "#ffe6cf", "#d6f5e6", "#fff4bf"];
+const calColor = id => CAL_COLORS[Math.max(0, data.cals.findIndex(c => c.id === id)) % CAL_COLORS.length];
+// "Reuniões do Microsoft Teams; sala1@…; sala2@…" vira "Teams"; e-mails de sala somem
+const shortWhere = w => !w ? "" : /microsoft teams/i.test(w) ? "Teams" : w.split(/;\s*/).filter(x => !/@/.test(x)).join(", ");
+const hm = m => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+const toMin = t => { const [h, m] = (t || "0:0").split(":").map(Number); return h * 60 + (m || 0); };
+// todos os eventos do dia (os da aurora e os importados), com a coluna de cada um quando eles se sobrepõem
+let dayEvents = {};
+function agendaOf(k) {
+  const own = eventsOn(k).map(e => ({ key: "ev:" + e.id, own: e.id, cal: "aurora", color: "#e3f25f", title: e.title, allDay: !e.time, s: toMin(e.time), e: Math.min(1440, toMin(e.time) + 60) }));
+  const all = [...own, ...calEventsOn(k)];
+  dayEvents = Object.fromEntries(all.map(a => [a.key, a]));
+  const timed = all.filter(a => !a.allDay).sort((a, b) => a.s - b.s || b.e - a.e);
+  let group = [], lanes = [], end = -1;
+  const close = () => group.forEach(a => a.cols = lanes.length);
+  for (const a of timed) {
+    if (a.s >= end) { close(); group = []; lanes = []; }
+    let l = lanes.findIndex(x => x <= a.s); if (l < 0) l = lanes.length;
+    lanes[l] = a.e; a.lane = l; group.push(a); end = Math.max(end, a.e);
+  }
+  close();
+  return { allDay: all.filter(a => a.allDay), timed };
+}
+const PXH = 64; // altura de uma hora na agenda
+function agendaHTML(k) {
+  const { allDay, timed } = agendaOf(k);
+  if (!allDay.length && !timed.length) return '<p class="empty">' + (data.cals.length ? "Nada na agenda hoje." : "Nada na agenda. Ligue seus calendários do Outlook e da Apple em “calendários”.") + "</p>";
+  const cx = a => /^cancelad[oa]\b/i.test(a.title) ? " cx" : "";
+  const nn = a => (data.notes[a.key] || []).length;
+  const badge = a => nn(a) ? '<span class="nb">📝 ' + nn(a) + "</span>" : "";
+  const cals = [...new Map([...allDay, ...timed].map(a => [a.cal, a.color])).entries()];
+  let h = '<div class="calkeys">' + cals.map(([n, c]) => '<span><i style="background:' + c + '"></i>' + esc(n) + "</span>").join("") + "</div>";
+  if (allDay.length) h += '<div class="allday">' + allDay.map(a => '<button type="button" class="evb' + cx(a) + '" data-evn="' + esc(a.key) + '" style="--c:' + a.color + '"><b>' + esc(a.title) + "</b>" + badge(a) + "</button>").join("") + "</div>";
+  if (timed.length) {
+    const h0 = Math.min(8, Math.floor(timed[0].s / 60)), h1 = Math.max(19, Math.ceil(Math.max(...timed.map(a => a.e)) / 60));
+    let grid = "";
+    for (let x = h0; x < h1; x++) grid += '<div class="hr" style="top:' + (x - h0) * PXH + 'px"><span>' + String(x).padStart(2, "0") + "</span></div>";
+    const nowM = new Date().getHours() * 60 + new Date().getMinutes();
+    if (k === TODAY && nowM >= h0 * 60 && nowM < h1 * 60) grid += '<div class="now" style="top:' + (nowM - h0 * 60) / 60 * PXH + 'px"></div>';
+    grid += timed.map(a => {
+      const top = (a.s - h0 * 60) / 60 * PXH, ht = Math.max(24, (a.e - a.s) / 60 * PXH - 3), tall = ht >= 44;
+      return '<button type="button" class="evb' + cx(a) + (tall ? "" : " short") + '" data-evn="' + esc(a.key) + '" style="--c:' + a.color + ";top:" + top + "px;height:" + ht + "px;left:calc(" + a.lane + " * 100% / " + a.cols + ");width:calc(100% / " + a.cols + ' - 4px)">' +
+        "<b>" + esc(a.title) + "</b>" + '<span class="et2">' + hm(a.s) + "–" + hm(a.e) + (a.where ? " · " + esc(a.where) : "") + "</span>" + badge(a) + "</button>";
+    }).join("");
+    h += '<div class="dayline" style="height:' + (h1 - h0) * PXH + 'px">' + grid + "</div>";
+  }
+  return h;
 }
 
 // ---------- hoje: agenda, tarefas, hábitos e água numa tela ----------
-const taskLine = t => '<div class="task' + (t.done ? " on" : "") + '"><label class="hrow"><input type="checkbox" data-task="' + t.id + '"' + (t.done ? " checked" : "") + "><span>" + esc(t.title) + "</span></label>" +
+const taskLine = t => '<div class="task' + (t.done ? " on" : "") + '"><label class="hrow"><input type="checkbox" data-task="' + t.id + '"' + (t.done ? " checked" : "") + "><span>" + esc(t.title) + (t.ev ? '<small class="from">' + esc(t.ev) + "</small>" : "") + "</span></label>" +
   (t.date < TODAY ? '<span class="meta">' + fmt(t.date) + "</span>" : "") + '<button type="button" class="del" data-edit="task:' + t.id + '" aria-label="Editar tarefa">✎</button></div>';
 function renderToday() {
   const d = toDate(TODAY);
-  const agenda = [...eventsOn(TODAY).map(e => ({ title: e.title, time: e.time, edit: e.id })), ...calEventsOn(TODAY)]
-    .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const n = agendaOf(TODAY), count = n.allDay.length + n.timed.length;
   const late = data.tasks.filter(t => !t.done && t.date < TODAY && t.date >= START).sort((a, b) => a.date.localeCompare(b.date));
   const mine = data.tasks.filter(t => t.date === TODAY), open = [...late, ...mine.filter(t => !t.done)].length;
   const errs = data.cals.filter(c => icsErr[c.id]).map(c => '<p class="empty">⚠️ ' + esc(c.name) + ": " + esc(icsErr[c.id]) + "</p>").join("");
   $("today").innerHTML =
     '<div class="todayhead sky"><span class="label">' + DOWL[d.getDay()] + '</span><h2>' + d.getDate() + " de " + MONL[d.getMonth()] + "</h2>" +
-    '<div class="chips"><span class="chip">📅 ' + agenda.length + (agenda.length === 1 ? " evento" : " eventos") + '</span><span class="chip">✅ ' + open + (open === 1 ? " tarefa" : " tarefas") +
+    '<div class="chips"><span class="chip">📅 ' + count + (count === 1 ? " evento" : " eventos") + '</span><span class="chip">✅ ' + open + (open === 1 ? " tarefa" : " tarefas") +
     '</span><span class="chip">🌱 ' + data.habits.filter(h => done(TODAY, h.id)).length + "/" + data.habits.length + "</span></div></div>" +
     '<div class="sec"><div class="sech"><h3>agenda</h3><button type="button" class="add" data-new="cals">calendários ›</button></div>' + errs +
-    (agenda.length ? '<ul class="list">' + agenda.map(a => a.edit ? eventLine({ id: a.edit, title: a.title, time: a.time })
-      : '<li><div class="line static"><span class="when">' + (a.time ? a.time + (a.until ? '<small>' + a.until + "</small>" : "") : "dia todo") + '</span><span class="eb"><span class="et">' + esc(a.title) + '</span><span class="meta">' + esc(a.cal) + (a.where ? " · " + esc(a.where) : "") + "</span></span></div></li>").join("") + "</ul>"
-      : '<p class="empty">' + (data.cals.length ? "Nada na agenda hoje." : "Nada na agenda. Ligue seus calendários do Outlook e da Apple em “calendários”.") + "</p>") + "</div>" +
+    agendaHTML(TODAY) + "</div>" +
     '<div class="sec"><div class="sech"><h3>tarefas</h3><span class="label">' + open + " para fazer</span></div>" +
     (late.length ? '<span class="flabel">ficaram de antes</span>' + late.map(taskLine).join("") : "") +
     mine.sort((a, b) => a.done - b.done).map(taskLine).join("") +
@@ -440,7 +488,7 @@ function render() { renderToday(); renderCal(); renderDay(); renderHabits(); ren
 
 // ---------- folha de criar / editar ----------
 const ADD = { event: "Evento", workout: "Treino", "read-link": "Link" };
-const NAMES = { task: "tarefa", cals: "calendários", event: "novo evento", workout: "novo treino", habit: "novo hábito", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
+const NAMES = { evnote: "evento", task: "tarefa", cals: "calendários", event: "novo evento", workout: "novo treino", habit: "novo hábito", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
 const MONTHLY = { income: "renda", ape: "apartamento", prepaid: "pagamento antecipado" }; // valores de um mês só
 let sh = null; // { kind, obj, day, fromDay }
 const MONEY = 'type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"';
@@ -457,6 +505,15 @@ function fields(kind, o, day) {
     case "workout": return fld("tipo", '<select class="in" name="type">' + WTYPES.map(t => "<option" + (t === o?.type ? " selected" : "") + ">" + t + "</option>").join("") + "</select>") +
       pair(fld("dia", inp("date", 'type="date" required', o?.date || day)), fld("minutos", inp("min", 'type="number" min="1" inputmode="numeric"', o?.min))) +
       fld("como foi", txt("note", o?.note, "opcional"));
+    case "evnote": {
+      const a = o, ns = data.notes[a.key] || [];
+      return '<div class="evhead" style="--c:' + a.color + '"><b>' + esc(a.title) + "</b><span>" + (a.allDay ? "dia todo" : hm(a.s) + "–" + hm(a.e)) + " · " + esc(a.cal) + (a.where ? " · " + esc(a.where) : "") + "</span>" +
+        (a.own ? '<button type="button" class="add" data-edit="event:' + a.own + '">editar evento ›</button>' : "") + "</div>" +
+        (ns.length ? '<ul class="notes">' + ns.map(x => '<li><span>' + esc(x.t) + "</span>" +
+          (x.task ? '<span class="meta">virou tarefa ✓</span>' : '<button type="button" class="chip" data-n2t="' + x.id + '">→ tarefa</button>') +
+          '<button type="button" class="del" data-ndel="' + x.id + '" aria-label="Apagar anotação">✕</button></li>').join("") + "</ul>" : "") +
+        fld("anotação", txt("note", "", "ex: mandar a pauta antes, levar os números…"));
+    }
     case "task": return fld("tarefa", inp("title", 'required autocomplete="off"', o?.title)) + fld("dia", inp("date", 'type="date" required', o?.date || day));
     case "cals": return (data.cals.length ? '<ul class="list">' + data.cals.map(c => '<li class="line static"><span class="eb"><span class="et">' + esc(c.name) + '</span><span class="meta">' + esc(new URL(c.url.replace(/^webcals?:/, "https:")).hostname) + '</span></span><button type="button" class="del" data-delcal="' + c.id + '" aria-label="Remover ' + esc(c.name) + '">✕</button></li>').join("") + "</ul>" : "") +
       fld("nome", inp("name", 'autocomplete="off" placeholder="ex: trabalho, pessoal"')) + fld("link do calendário (.ics)", inp("url", 'type="text" inputmode="url" autocomplete="off" placeholder="webcal://… ou https://….ics"')) +
@@ -486,19 +543,19 @@ function fields(kind, o, day) {
 }
 function drawSheet() {
   const { kind, obj, day, fromDay } = sh;
-  $("shtitle").textContent = fromDay ? "registrar · " + fmt(day) : MONTHLY[kind] ? MONTHLY[kind] + " · " + mlabel(finSel) : obj ? "editar" : NAMES[kind];
+  $("shtitle").textContent = fromDay ? "registrar · " + fmt(day) : MONTHLY[kind] ? MONTHLY[kind] + " · " + mlabel(finSel) : kind === "evnote" ? "anotações" : obj ? "editar" : NAMES[kind];
   $("shseg").hidden = !fromDay;
   $("shseg").innerHTML = Object.entries(ADD).map(([k, v]) => '<button type="button" data-sk="' + k + '" aria-pressed="' + (k === kind) + '">' + v + "</button>").join("");
   $("shfields").innerHTML = fields(kind, obj, day);
-  $("shdel").hidden = !obj;
+  $("shdel").hidden = !obj || kind === "evnote";
   const btn = $("shsave");
   btn.disabled = false;
-  btn.textContent = "salvar";
+  btn.textContent = kind === "evnote" ? "anotar" : "salvar";
 }
 function openSheet(kind, obj = null, day = sel, fromDay = false) {
   sh = { kind, obj, day, fromDay };
   drawSheet();
-  $("sheet").showModal();
+  if (!$("sheet").open) $("sheet").showModal(); // de dentro da folha do evento dá para abrir a edição dele
 }
 const closeSheet = () => { $("sheet").close(); sh = null; };
 $("shclose").onclick = closeSheet;
@@ -515,7 +572,9 @@ $("shform").onsubmit = async e => {
   e.preventDefault();
   const f = e.target.elements, { kind, obj, day } = sh, v = n => (f[n]?.value ?? "").trim(), btn = $("shsave");
   const busy = t => { btn.disabled = true; btn.textContent = t; };
-  if (kind === "task") upsert(data.tasks, obj, { date: v("date"), title: v("title"), done: obj?.done || false });
+  if (kind === "evnote") {
+    if (v("note")) { (data.notes[obj.key] ||= []).push({ id: uid(), t: v("note") }); save(); drawSheet(); return; } // continua aberta para anotar mais
+  } else if (kind === "task") upsert(data.tasks, obj, { date: v("date"), title: v("title"), done: obj?.done || false });
   else if (kind === "cals") {
     if (v("url")) { data.cals.push({ id: uid(), name: v("name") || "calendário", url: v("url") }); closeSheet(); save(); return loadCals(); }
   } else if (kind === "event") upsert(data.events, obj, { date: v("date"), time: v("time"), title: v("title") });
@@ -623,6 +682,16 @@ document.addEventListener("click", e => {
     if (what === "entry") return openSheet("entry", (data.days[sel] || []).find(x => x.id === id), sel);
     const it = itemOf(id); if (it) return openSheet(it.kind, it);
     return;
+  }
+  const ev = e.target.closest("[data-evn]");
+  if (ev && dayEvents[ev.dataset.evn]) return openSheet("evnote", dayEvents[ev.dataset.evn]);
+  const nt = e.target.closest("[data-n2t],[data-ndel]");
+  if (nt && sh?.kind === "evnote") {
+    const a = sh.obj, ns = data.notes[a.key] || [], x = ns.find(y => y.id === (nt.dataset.n2t || nt.dataset.ndel));
+    if (!x) return;
+    if (nt.dataset.n2t) { data.tasks.push({ id: uid(), date: TODAY, title: x.t, ev: a.title, done: false }); x.task = true; }
+    else { data.notes[a.key] = ns.filter(y => y !== x); if (!data.notes[a.key].length) delete data.notes[a.key]; }
+    save(); return drawSheet();
   }
   const dc = e.target.closest("[data-delcal]");
   if (dc) {

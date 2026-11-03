@@ -194,6 +194,7 @@ textarea.in{resize:vertical;min-height:64px;line-height:1.4}
 /* treinos */
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{background:var(--sky-l);border-radius:99px;padding:6px 13px;font-size:.85rem}
+button.chip{border:0;font:inherit;font-weight:600;cursor:pointer}
 
 /* finanças */
 .fstrip{display:grid;grid-auto-flow:column;grid-auto-columns:58px;gap:4px;overflow-x:auto;margin:0 -16px;padding:0 16px 4px;scrollbar-width:none}
@@ -256,6 +257,37 @@ button.fs:active{background:var(--hover)}
 .task{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--hair)}
 .task .meta{white-space:nowrap}
 .taskadd{display:flex;gap:8px;margin-top:4px}
+.from{display:block;font-size:.75rem;color:var(--muted)}
+/* agenda do dia: blocos do tamanho do evento */
+.calkeys{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.78rem;color:var(--soft)}
+.calkeys span{display:inline-flex;align-items:center;gap:6px}
+.calkeys i{width:12px;height:12px;border-radius:4px;box-shadow:inset 0 0 0 1px #0a0a0a26}
+.allday{display:grid;gap:4px}
+.evb{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:1px;padding:6px 10px;border-radius:12px;background:var(--c);border-left:4px solid color-mix(in srgb,var(--c) 55%,#0a0a0a);overflow:hidden;min-width:0}
+.evb b{font-weight:600;font-size:.9rem;line-height:1.2;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evb .et2{font-size:.74rem;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.evb:not(.short) b{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.evb.short{flex-direction:row;align-items:center;gap:8px;padding:2px 10px}
+.evb.short b{font-size:.82rem}
+.evb.cx{opacity:.45}
+.evb.cx b{text-decoration:line-through}
+.evb:focus-visible{outline:2px solid var(--sky-d);outline-offset:1px}
+.nb{font-size:.7rem;font-weight:600;margin-top:auto}
+.evb.short .nb{margin:0 0 0 auto}
+.dayline{position:relative;margin-left:44px}
+.dayline .hr{position:absolute;left:-44px;right:0;border-top:1px solid var(--hair);height:0}
+.dayline .hr span{position:absolute;top:-8px;left:0;font-size:.7rem;font-weight:600;color:var(--muted);background:var(--paper);padding-right:6px}
+.dayline .evb{position:absolute;margin:1px 2px}
+.now{position:absolute;left:-6px;right:0;height:0;border-top:2px solid #e5484d;z-index:2}
+.now::before{content:"";position:absolute;left:0;top:-5px;width:8px;height:8px;border-radius:99px;background:#e5484d}
+.evhead{display:grid;gap:4px;padding:14px;border-radius:16px;background:var(--c)}
+.evhead b{font-size:1.1rem;letter-spacing:-.03em}
+.evhead span{font-size:.82rem;color:var(--soft)}
+.evhead .add{justify-self:start;padding:4px 0 0}
+.notes{list-style:none;margin:0;padding:0;display:grid}
+.notes li{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--hair)}
+.notes li>span:first-child{flex:1;overflow-wrap:anywhere}
+.notes .chip{background:var(--ink);color:#fff;font-size:.78rem;height:30px;padding:0 12px}
 .taskadd .nbtn{height:52px;min-width:52px;background:var(--ink);color:#fff;font-size:1.4rem}
 
 /* abas embaixo, como em app */
