@@ -1,6 +1,6 @@
 // Guarda o app para abrir sem internet. Rede primeiro (pega a versão nova), cache só quando estiver offline.
 // Os dados (Supabase) e a prévia de links nunca passam pelo cache.
-const CACHE = "aurora-v8";
+const CACHE = "aurora-v9";
 const SHELL = ["/", "/style.css", "/app.js", "/manifest.webmanifest", "/icon.svg", "/icon-192.png",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"];
 

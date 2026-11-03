@@ -25,13 +25,22 @@ const uid = () => crypto.randomUUID();
    water    copos de 200 ml por dia { "2026-10-26": 6 }
    tasks    tarefas                 [{ id, date, title, desc, done, ev? }]
    notes    anotações por evento    { "uid|2026-11-03" ou "ev:id": [{ id, t, task }] }  (task = já virou tarefa)
-   cals     calendários assinados   [{ id, name, url }]  (link .ics secreto: fica só na conta, nunca no código)
+   cals     calendários assinados   [{ id, name, url }]
+   shelf    estante                 [{ id, title, pages, cover, format: "físico"|"ebook", status: "quero"|"lendo"|"lido", started, finished }]
+   pages    página em que parou     { "2026-11-03": { livroId: 120 } }  (link .ics secreto: fica só na conta, nunca no código)
    finance  planejador              { income: {mês: R$}, prepaid: {mês: R$}, ape: {mês: {parcela, evolucao}},
                                       fixed: [{ id, name, value, start: mês, rec }],
                                       card: [{ id, desc, cat, value, start: mês, n, N, rec }] }  (mês = "2026-11") */
 const norm = d => {
   d = d && typeof d === "object" ? d : {};
   d.items ||= []; d.days ||= {}; d.habits ||= []; d.checks ||= {}; d.workouts ||= []; d.events ||= []; d.water ||= {}; d.tasks ||= []; d.cals ||= []; d.notes ||= {};
+  if (!d.shelf) { // primeira vez: os livros antigos da aba Conteúdo viram a estante, com as páginas já registradas
+    const old = d.items.filter(i => i.kind === "book");
+    d.shelf = old.map(i => ({ id: i.id, title: i.title, pages: i.pages || null, cover: i.image || "", format: "físico", status: i.done ? "lido" : "lendo", created: i.created }));
+    d.pages ||= {};
+    for (const [k, es] of Object.entries(d.days)) for (const e of es) if (+e.to && old.some(b => b.id === e.item)) (d.pages[k] ||= {})[e.item] = Math.max(+e.to, d.pages[k]?.[e.item] || 0);
+  }
+  d.pages ||= {};
   const F = d.finance ||= {}; F.income ||= {}; F.prepaid ||= {}; F.ape ||= {}; F.fixed ||= []; F.card ||= [];
   d.items.forEach(i => { if (i.kind === "podcast" || i.kind === "text") i.kind = "link"; }); // podcasts e textos viraram links
   return d;
@@ -218,7 +227,7 @@ let dayEvents = {};
 function agendaOf(k) {
   const own = eventsOn(k).map(e => ({ key: "ev:" + e.id, own: e.id, cal: "aurora", color: "#e3f25f", title: e.title, allDay: !e.time, s: toMin(e.time), e: Math.min(1440, toMin(e.time) + 60) }));
   const all = [...own, ...calEventsOn(k)];
-  dayEvents = Object.fromEntries(all.map(a => [a.key, a]));
+  Object.assign(dayEvents, Object.fromEntries(all.map(a => [a.key, a]))); // a chave tem o dia: hoje e o dia escolhido convivem
   const timed = all.filter(a => !a.allDay).sort((a, b) => a.s - b.s || b.e - a.e);
   let group = [], lanes = [], end = -1;
   const close = () => group.forEach(a => a.cols = lanes.length);
@@ -256,6 +265,54 @@ function agendaHTML(k) {
   return h;
 }
 
+// ---------- estante e páginas lidas ----------
+const STATUS = { lendo: "📖 lendo", quero: "🔖 quero ler", lido: "✅ lido" };
+const bookOf = id => data.shelf.find(b => b.id === id);
+const pageAt = (id, k) => Math.max(0, ...Object.entries(data.pages).filter(([d, m]) => d <= k && m[id]).map(([, m]) => m[id]));
+const readOn = (id, k) => data.pages[k]?.[id] ? Math.max(0, data.pages[k][id] - pageAt(id, addDays(k, -1))) : 0;
+const coverImg = (b, cls) => b.cover ? '<img class="' + cls + '" src="' + esc(b.cover) + '" alt="" loading="lazy" data-gl="▤">' : '<span class="' + cls + ' gl">▤</span>';
+const progress = b => {
+  const p = pageAt(b.id, "9999");
+  if (b.status === "lido") return "";
+  return b.pages ? '<span class="bar"><i style="width:' + Math.min(100, p / b.pages * 100) + '%"></i></span><span class="meta">p. ' + p + " de " + b.pages + "</span>" : p ? '<span class="meta">p. ' + p + "</span>" : "";
+};
+// capa: a foto é reduzida no aparelho para uns 30 KB e vai junto com os dados
+// ponytail: imagem dentro do JSON da conta; se a estante passar de centenas de livros, mover para o Storage do Supabase
+async function shrink(file) {
+  const img = await createImageBitmap(file), k = Math.min(1, 360 / img.height), c = document.createElement("canvas");
+  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.75);
+}
+function setStatus(b, st, day = TODAY) {
+  if (st === "lendo") b.started ||= day;
+  if (st === "lido") b.finished ||= day; else delete b.finished;
+  b.status = st;
+}
+function renderShelf() {
+  const by = st => data.shelf.filter(b => b.status === st);
+  $("shelf").innerHTML = Object.keys(STATUS).map(st => {
+    const bs = by(st).sort((a, b) => (b.finished || b.created || "").localeCompare(a.finished || a.created || ""));
+    return '<div class="sech"><h3>' + STATUS[st] + '</h3><span class="label">' + bs.length + "</span></div>" +
+      (bs.length ? '<div class="cards">' + bs.map(b => '<article class="card book">' + coverImg(b, "cover") + '<div class="cbody"><span class="ct">' + esc(b.title) + "</span>" +
+        '<span class="cs">' + (b.format === "ebook" ? "📱 ebook" : "📕 físico") + (b.finished ? " · terminado em " + fmt(b.finished) : "") + "</span>" + progress(b) +
+        '<div class="bst">' + Object.keys(STATUS).map(x => '<button type="button" data-bst="' + b.id + ":" + x + '" aria-pressed="' + (x === st) + '">' + STATUS[x].split(" ").slice(1).join(" ") + "</button>").join("") + "</div>" +
+        '<div class="cact"><button type="button" data-edit="book:' + b.id + '">editar</button></div></div></article>').join("") + "</div>"
+        : '<p class="empty">' + (st === "lendo" ? "Nenhum livro em andamento." : st === "quero" ? "Nada na fila ainda." : "Nenhum terminado ainda.") + "</p>");
+  }).join("");
+}
+// livros para registrar no dia k: os que estão sendo lidos e os que já têm página nesse dia
+function readingHTML(k) {
+  const bs = data.shelf.filter(b => b.status === "lendo" || data.pages[k]?.[b.id]);
+  if (!bs.length) return '<p class="empty">Marque um livro como “lendo” na Estante para registrar as páginas.</p>';
+  return bs.map(b => {
+    const n = readOn(b.id, k);
+    return '<div class="rdrow">' + coverImg(b, "th") + '<span class="eb"><span class="et">' + esc(b.title) + '</span><span class="meta">p. ' + pageAt(b.id, k) + (b.pages ? " de " + b.pages : "") + (n ? " · +" + n + " pág." : "") + "</span></span>" +
+      '<form class="pgform" data-book="' + b.id + '" data-day="' + k + '"><input class="in" name="page" type="number" min="1" inputmode="numeric" placeholder="parei na" aria-label="Página em que parou" value="' + (data.pages[k]?.[b.id] || "") + '"><button class="nbtn" aria-label="Salvar página">ok</button></form></div>';
+  }).join("");
+}
+const taskForm = k => '<form class="taskadd" data-day="' + k + '"><input class="in" name="title" placeholder="' + (k === TODAY ? "nova tarefa…" : "tarefa para " + fmt(k) + "…") + '" autocomplete="off" aria-label="Nova tarefa" required><button class="nbtn" aria-label="Adicionar tarefa">+</button></form>';
+
 // ---------- hoje: agenda, tarefas, hábitos e água numa tela ----------
 const taskLine = t => '<div class="task' + (t.done ? " on" : "") + '"><label class="hrow"><input type="checkbox" data-task="' + t.id + '"' + (t.done ? " checked" : "") + "><span>" + esc(t.title) + (t.ev ? '<small class="from">' + esc(t.ev) + "</small>" : "") + "</span></label>" +
   (t.date < TODAY ? '<span class="meta">' + fmt(t.date) + "</span>" : "") + '<button type="button" class="del" data-edit="task:' + t.id + '" aria-label="Editar tarefa">✎</button>' +
@@ -270,14 +327,15 @@ function renderToday() {
     '<div class="todayhead sky"><span class="label">' + DOWL[d.getDay()] + '</span><h2>' + d.getDate() + " de " + MONL[d.getMonth()] + "</h2>" +
     '<div class="chips"><span class="chip">📅 ' + count + (count === 1 ? " evento" : " eventos") + '</span><span class="chip">✅ ' + open + (open === 1 ? " tarefa" : " tarefas") +
     '</span><span class="chip">🌱 ' + data.habits.filter(h => done(TODAY, h.id)).length + "/" + data.habits.length + "</span></div></div>" +
-    '<div class="sec"><div class="sech"><h3>agenda</h3><button type="button" class="add" data-new="cals">calendários ›</button></div>' + errs +
+    '<div class="sec ag"><div class="sech"><h3>agenda</h3><button type="button" class="add" data-new="cals">calendários ›</button></div>' + errs +
     agendaHTML(TODAY) + "</div>" +
-    '<div class="sec"><div class="sech"><h3>tarefas</h3><span class="label">' + open + " para fazer</span></div>" +
+    '<div class="side"><div class="sec tk"><div class="sech"><h3>tarefas</h3><span class="label">' + open + " para fazer</span></div>" +
     (late.length ? '<span class="flabel">ficaram de antes</span>' + late.map(taskLine).join("") : "") +
     mine.sort((a, b) => a.done - b.done).map(taskLine).join("") +
-    '<form class="taskadd" id="taskadd"><input class="in" name="title" placeholder="nova tarefa…" autocomplete="off" aria-label="Nova tarefa" required><button class="nbtn" aria-label="Adicionar tarefa">+</button></form></div>' +
-    '<div class="sec"><div class="sech"><h3>hábitos</h3><span class="label">' + data.habits.filter(h => done(TODAY, h.id)).length + " / " + data.habits.length + "</span></div>" +
-    (data.habits.length ? '<div class="hlist">' + data.habits.map(h => habitCheck(h, TODAY)).join("") + "</div>" : '<p class="empty">Crie hábitos na aba Hábitos.</p>') + waterBlock(TODAY) + "</div>";
+    taskForm(TODAY) + "</div>" +
+    '<div class="sec hab"><div class="sech"><h3>hábitos</h3><span class="label">' + data.habits.filter(h => done(TODAY, h.id)).length + " / " + data.habits.length + "</span></div>" +
+    (data.habits.length ? '<div class="hlist">' + data.habits.map(h => habitCheck(h, TODAY)).join("") + "</div>" : '<p class="empty">Crie hábitos na aba Hábitos.</p>') + waterBlock(TODAY) + "</div>" +
+    '<div class="sec rd"><div class="sech"><h3>leitura</h3><span class="label">' + data.shelf.reduce((n, b) => n + readOn(b.id, TODAY), 0) + " pág. hoje</span></div>" + readingHTML(TODAY) + "</div></div>";
 }
 
 // ---------- desenho ----------
@@ -323,10 +381,10 @@ function renderCal() {
   for (let n = 1; n <= last; n++) {
     const k = iso(new Date(y, m, n));
     const its = [...new Set((data.days[k] || []).map(e => e.item))].map(itemOf).filter(it => it?.kind === "link");
-    const ev = data.events.some(e => e.date === k), wo = data.workouts.some(w => w.date === k), r = habRatio(k);
+    const ev = data.events.some(e => e.date === k), wo = data.workouts.some(w => w.date === k), tk = data.tasks.some(t => t.date === k && !t.done), r = habRatio(k);
     h += '<button type="button" class="cd' + (k === sel ? " sel" : "") + (k === TODAY ? " today" : "") + '" data-d="' + k + '" aria-label="' + n + " de " + MONL[m] + '">' +
       '<span class="n">' + n + '</span>' +
-      '<span class="ths">' + (ev ? '<i class="mk ev"></i>' : "") + (wo ? '<i class="mk wo"></i>' : "") + its.slice(0, 2).map(it => thumb(it, "mini")).join("") +
+      '<span class="ths">' + (ev ? '<i class="mk ev"></i>' : "") + (wo ? '<i class="mk wo"></i>' : "") + (tk ? '<i class="mk tk"></i>' : "") + its.slice(0, 2).map(it => thumb(it, "mini")).join("") +
       (its.length > 2 ? '<span class="more">+' + (its.length - 2) + '</span>' : "") + '</span>' +
       (r > 0 ? '<i class="hb"><i style="width:' + Math.round(r * 100) + '%"></i></i>' : "") + '</button>';
   }
@@ -335,12 +393,14 @@ function renderCal() {
 
 const block = (title, body) => '<div class="block"><span class="flabel">' + title + "</span>" + body + "</div>";
 function renderDay() {
-  const d = toDate(sel), es = (data.days[sel] || []).filter(e => itemOf(e.item)?.kind === "link"), evs = eventsOn(sel), wos = workoutsOn(sel);
+  const d = toDate(sel), es = (data.days[sel] || []).filter(e => itemOf(e.item)?.kind === "link"), wos = workoutsOn(sel);
   let h = '<div class="sech"><h3>' + d.getDate() + " de " + MONL[d.getMonth()] + '</h3><span class="label">' + DOWL[d.getDay()] + (sel === TODAY ? " · hoje" : "") + "</span></div>";
   // só aparecem os blocos que têm algo; água e hábitos sempre, para marcar
-  if (evs.length) h += block("Eventos", '<ul class="list">' + evs.map(e => eventLine(e)).join("") + "</ul>");
+  h += block("Tarefas", data.tasks.filter(t => t.date === sel).sort((a, b) => a.done - b.done).map(taskLine).join("") + taskForm(sel));
+  h += block("Agenda", agendaHTML(sel));
   h += waterBlock(sel);
   if (data.habits.length) h += block("Hábitos", '<div class="hlist">' + data.habits.map(x => habitCheck(x, sel)).join("") + "</div>");
+  if (data.shelf.some(b => b.status === "lendo" || data.pages[sel]?.[b.id])) h += block("Leitura", readingHTML(sel));
   if (wos.length) h += block("Treinos", '<ul class="list">' + wos.map(workoutLine).join("") + "</ul>");
   if (es.length) h += block("Conteúdo", '<ul class="list">' + es.map(entryLine).join("") + "</ul>");
   $("day").innerHTML = h + '<button type="button" class="newbtn solid" data-new="day">+ registrar</button>';
@@ -489,11 +549,11 @@ $("fprev").onclick = () => { const ms = finMonths(); finSel = ms[ms.indexOf(finS
 $("fnext").onclick = () => { const ms = finMonths(); finSel = ms[ms.indexOf(finSel) + 1] || finSel; renderFinance(); };
 $("fcard").addEventListener("toggle", e => { const d = e.target; if (d.dataset?.cat) d.open ? finOpen.add(d.dataset.cat) : finOpen.delete(d.dataset.cat); }, true);
 
-function render() { renderToday(); renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); renderList("link"); renderFinance(); }
+function render() { renderToday(); renderShelf(); renderCal(); renderDay(); renderHabits(); renderWorkouts(); renderEvents(); renderList("link"); renderFinance(); }
 
 // ---------- folha de criar / editar ----------
 const ADD = { event: "Evento", workout: "Treino", "read-link": "Link" };
-const NAMES = { evnote: "evento", task: "tarefa", cals: "calendários", event: "novo evento", workout: "novo treino", habit: "novo hábito", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
+const NAMES = { book: "novo livro", evnote: "evento", task: "tarefa", cals: "calendários", event: "novo evento", workout: "novo treino", habit: "novo hábito", link: "novo link", entry: "registro", fixed: "novo gasto fora do cartão", card: "nova compra no cartão" };
 const MONTHLY = { income: "renda", ape: "apartamento", prepaid: "pagamento antecipado" }; // valores de um mês só
 let sh = null; // { kind, obj, day, fromDay }
 const MONEY = 'type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"';
@@ -519,6 +579,11 @@ function fields(kind, o, day) {
           '<button type="button" class="del" data-ndel="' + x.id + '" aria-label="Apagar anotação">✕</button></li>').join("") + "</ul>" : "") +
         fld("anotação", txt("note", "", "ex: mandar a pauta antes, levar os números…"));
     }
+    case "book": return (o?.cover ? '<p class="shitem">' + coverImg(o, "cover") + "</p>" : "") +
+      fld("título", inp("title", 'required autocomplete="off"', o?.title)) +
+      pair(fld("páginas", inp("pages", 'type="number" min="1" inputmode="numeric"', o?.pages)), fld("formato", '<select class="in" name="format">' + ["físico", "ebook"].map(x => "<option" + (x === (o?.format || "físico") ? " selected" : "") + ">" + x + "</option>").join("") + "</select>")) +
+      fld("status", '<select class="in" name="status">' + Object.entries(STATUS).map(([x, l]) => '<option value="' + x + '"' + (x === (o?.status || "quero") ? " selected" : "") + ">" + l + "</option>").join("") + "</select>") +
+      fld("foto da capa", '<input class="in" name="cover" type="file" accept="image/*">');
     case "task": return fld("título", inp("title", 'required autocomplete="off"', o?.title)) + fld("descrição", txt("desc", o?.desc, "detalhes, links, passo a passo… (opcional)")) + fld("dia", inp("date", 'type="date" required', o?.date || day));
     case "cals": return (data.cals.length ? '<ul class="list">' + data.cals.map(c => '<li class="line static"><span class="eb"><span class="et">' + esc(c.name) + '</span><span class="meta">' + esc(new URL(c.url.replace(/^webcals?:/, "https:")).hostname) + '</span></span><button type="button" class="del" data-delcal="' + c.id + '" aria-label="Remover ' + esc(c.name) + '">✕</button></li>').join("") + "</ul>" : "") +
       fld("nome", inp("name", 'autocomplete="off" placeholder="ex: trabalho, pessoal"')) + fld("link do calendário (.ics)", inp("url", 'type="text" inputmode="url" autocomplete="off" placeholder="webcal://… ou https://….ics"')) +
@@ -577,7 +642,13 @@ $("shform").onsubmit = async e => {
   e.preventDefault();
   const f = e.target.elements, { kind, obj, day } = sh, v = n => (f[n]?.value ?? "").trim(), btn = $("shsave");
   const busy = t => { btn.disabled = true; btn.textContent = t; };
-  if (kind === "evnote") {
+  if (kind === "book") {
+    const b = obj || { id: uid(), created: TODAY };
+    if (f.cover.files[0]) { busy("preparando a capa…"); try { b.cover = await shrink(f.cover.files[0]); } catch { alert("Não consegui ler essa foto."); } }
+    Object.assign(b, { title: v("title"), pages: +v("pages") || null, format: v("format") });
+    setStatus(b, v("status"));
+    if (!obj) data.shelf.push(b);
+  } else if (kind === "evnote") {
     if (v("note")) { (data.notes[obj.key] ||= []).push({ id: uid(), t: v("note") }); save(); drawSheet(); return; } // continua aberta para anotar mais
   } else if (kind === "task") upsert(data.tasks, obj, { date: v("date"), title: v("title"), desc: v("desc"), done: obj?.done || false });
   else if (kind === "cals") {
@@ -635,6 +706,11 @@ $("shdel").onclick = () => {
   if (kind === "entry") { data.days[day] = data.days[day].filter(x => x !== obj); if (!data.days[day].length) delete data.days[day]; }
   else if (kind === "event") data.events = data.events.filter(x => x !== obj);
   else if (kind === "task") data.tasks = data.tasks.filter(x => x !== obj);
+  else if (kind === "book") {
+    if (!confirm("Tirar \"" + obj.title + "\" da estante?")) return;
+    data.shelf = data.shelf.filter(x => x !== obj);
+    for (const k in data.pages) { delete data.pages[k][obj.id]; if (!Object.keys(data.pages[k]).length) delete data.pages[k]; }
+  }
   else if (kind === "workout") data.workouts = data.workouts.filter(x => x !== obj);
   else if (kind === "fixed") data.finance.fixed = fin().fixed.filter(x => x !== obj);
   else if (kind === "card") {
@@ -681,6 +757,7 @@ document.addEventListener("click", e => {
     if (what === "event") return openSheet("event", data.events.find(x => x.id === id));
     if (what === "workout") return openSheet("workout", data.workouts.find(x => x.id === id));
     if (what === "task") return openSheet("task", data.tasks.find(x => x.id === id));
+    if (what === "book") return openSheet("book", bookOf(id));
     if (what === "habit") return openSheet("habit", data.habits.find(x => x.id === id));
     if (MONTHLY[what]) return openSheet(what);
     if (what === "fixed" || what === "card") return openSheet(what, fin()[what].find(x => x.id === id));
@@ -688,6 +765,8 @@ document.addEventListener("click", e => {
     const it = itemOf(id); if (it) return openSheet(it.kind, it);
     return;
   }
+  const bs = e.target.closest("[data-bst]");
+  if (bs) { const [id, st] = bs.dataset.bst.split(":"), b = bookOf(id); if (b) { setStatus(b, st); save(); } return; }
   const ev = e.target.closest("[data-evn]");
   if (ev && dayEvents[ev.dataset.evn]) return openSheet("evnote", dayEvents[ev.dataset.evn]);
   const nt = e.target.closest("[data-n2t],[data-ndel]");
@@ -714,11 +793,21 @@ document.addEventListener("click", e => {
 });
 
 document.addEventListener("submit", e => {
-  if (e.target.id !== "taskadd") return;
-  e.preventDefault();
-  const title = e.target.elements.title.value.trim(); if (!title) return;
-  data.tasks.push({ id: uid(), date: TODAY, title, done: false }); save();
-  $("taskadd").elements.title.focus(); // continua digitando a próxima
+  const f = e.target, tab = f.closest(".tab[id^='tab-']")?.id;
+  if (f.classList.contains("taskadd")) {
+    e.preventDefault();
+    const title = f.elements.title.value.trim(); if (!title) return;
+    data.tasks.push({ id: uid(), date: f.dataset.day, title, done: false }); save();
+    document.querySelector("#" + tab + " .taskadd")?.elements.title.focus(); // continua digitando a próxima
+  } else if (f.classList.contains("pgform")) {
+    e.preventDefault();
+    const b = bookOf(f.dataset.book), k = f.dataset.day, page = parseInt(f.elements.page.value);
+    if (!b) return;
+    if (page > 0) (data.pages[k] ||= {})[b.id] = page; else if (data.pages[k]) { delete data.pages[k][b.id]; if (!Object.keys(data.pages[k]).length) delete data.pages[k]; }
+    if (b.status === "quero" && page) setStatus(b, "lendo", k);
+    if (b.pages && page >= b.pages && b.status !== "lido") setStatus(b, "lido", k); // chegou na última página: terminou nesse dia
+    save();
+  }
 });
 $("tabbar").onclick = e => {
   const b = e.target.closest("[data-tab]"); if (!b) return;
